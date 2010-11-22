@@ -748,6 +748,21 @@ void CDE_end_readlink(struct tcb* tcp) {
         memcpy_to_child(tcp->pid, (char*)tcp->u_arg[1],
                         tcp->perceived_program_fullpath,
                         strlen(tcp->perceived_program_fullpath) + 1);
+
+        // VERY SUBTLE - set %eax (the syscall return value) to the length
+        // of the FAKED STRING, since readlink is supposed to return the
+        // length of the returned path (some programs like Python rely
+        // on that length to allocated memory)
+        struct user_regs_struct cur_regs;
+        EXITIF(ptrace(PTRACE_GETREGS, tcp->pid, NULL, (long)&cur_regs) < 0);
+#if defined (I386)
+        cur_regs.eax = (long)strlen(tcp->perceived_program_fullpath);
+#elif defined(X86_64)
+        cur_regs.rax = (long)strlen(tcp->perceived_program_fullpath);
+#else
+    #error "Unknown architecture (not I386 or X86_64)"
+#endif
+        ptrace(PTRACE_SETREGS, tcp->pid, NULL, (long)&cur_regs);
       }
       // if the program tries to read /proc/self/cwd, then treat it like
       // a CDE_end_getcwd call, returning a fake cwd:
@@ -758,6 +773,21 @@ void CDE_end_readlink(struct tcb* tcp) {
         char* sandboxed_pwd = extract_sandboxed_pwd(tcp->current_dir);
         memcpy_to_child(tcp->pid, (char*)tcp->u_arg[1],
                         sandboxed_pwd, strlen(sandboxed_pwd) + 1);
+
+        // VERY SUBTLE - set %eax (the syscall return value) to the length
+        // of the FAKED STRING, since readlink is supposed to return the
+        // length of the returned path (some programs like Python rely
+        // on that length to allocated memory)
+        struct user_regs_struct cur_regs;
+        EXITIF(ptrace(PTRACE_GETREGS, tcp->pid, NULL, (long)&cur_regs) < 0);
+#if defined (I386)
+        cur_regs.eax = (long)strlen(sandboxed_pwd);
+#elif defined(X86_64)
+        cur_regs.rax = (long)strlen(sandboxed_pwd);
+#else
+    #error "Unknown architecture (not I386 or X86_64)"
+#endif
+        ptrace(PTRACE_SETREGS, tcp->pid, NULL, (long)&cur_regs);
       }
     }
   }
