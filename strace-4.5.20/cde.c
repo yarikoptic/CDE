@@ -1162,18 +1162,22 @@ void CDE_begin_execve(struct tcb* tcp) {
     // component that comes after cde-root/, since that's what the
     // program PERCEIVES its full path to be
     if (tcp->perceived_program_fullpath) {
-      char* old_perceived_program_fullpath = tcp->perceived_program_fullpath;
-
       char* redirected_path =
         redirect_filename_into_cderoot(tcp->perceived_program_fullpath,
                                        tcp->current_dir);
+      // redirected_path could be NULL (e.g., if it's in cde.ignore),
+      // in which case just do nothing
+      if (redirected_path) {
+        char* old_perceived_program_fullpath = tcp->perceived_program_fullpath;
 
-      // extract_sandboxed_pwd (perhaps badly named for this scenario)
-      // extracts the part of redirected_path that comes AFTER cde-root/
-      // (note that extract_sandboxed_pwd does NOT malloc a new string)
-      tcp->perceived_program_fullpath = strdup(extract_sandboxed_pwd(redirected_path));
+        // extract_sandboxed_pwd (perhaps badly named for this scenario)
+        // extracts the part of redirected_path that comes AFTER cde-root/
+        // (note that extract_sandboxed_pwd does NOT malloc a new string)
+        tcp->perceived_program_fullpath =
+          strdup(extract_sandboxed_pwd(redirected_path));
 
-      free(old_perceived_program_fullpath);
+        free(old_perceived_program_fullpath);
+      }
     }
 
   }
