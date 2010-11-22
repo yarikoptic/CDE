@@ -369,7 +369,8 @@ struct tcb {
   //
   // (only valid in CDE_exec_mode, does not contain the true path
   // within cde-root/ ... contains what the program 'perceives' is its
-  // path from the original run)
+  // path from the original run, which is the portion of its absolute
+  // path AFTER the cde-root/ component)
   //
   // inherited from parent during fork()
   char* perceived_program_fullpath;

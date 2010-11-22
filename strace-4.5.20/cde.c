@@ -722,12 +722,28 @@ void CDE_end_readlink(struct tcb* tcp) {
     if (tcp->u_rval >= 0) {
       // super hack!  if the program is trying to access the special
       // /proc/self/exe file, return perceived_program_fullpath if
-      // available, or else it will erroneously return the path
+      // available, or else cde-exec will ERRONEOUSLY return the path
       // to the dynamic linker (e.g., ld-linux.so.2).
       //
       // programs like 'java' rely on the value of /proc/self/exe
-      // being the true path to the executable
-      if ((strcmp(tcp->opened_filename, "/proc/self/exe") == 0) &&
+      // being the true path to the executable, in order to dynamically
+      // load libraries based on paths relative to that full path!
+      char is_proc_self_exe = (strcmp(tcp->opened_filename, "/proc/self/exe") == 0);
+
+      // another super hack!  programs like Google Earth
+      // ('googleearth-bin') access /proc/self/exe as /proc/<pid>/exe
+      // where <pid> is ITS OWN PID!  be sure to handle that case properly
+      // (but don't worry about handling cases where <pid> is the PID of
+      // another process).
+      //
+      // (again, these programs use the real path of /proc/<pid>/exe as
+      // a basis for dynamically loading libraries, so we must properly
+      // 'fake' this value)
+      char* self_pid_name = format("/proc/%d/exe", tcp->pid);
+      char is_proc_self_pid_exe = (strcmp(tcp->opened_filename, self_pid_name) == 0);
+      free(self_pid_name);
+
+      if ((is_proc_self_exe || is_proc_self_pid_exe) &&
           tcp->perceived_program_fullpath) {
         memcpy_to_child(tcp->pid, (char*)tcp->u_arg[1],
                         tcp->perceived_program_fullpath,
@@ -735,6 +751,8 @@ void CDE_end_readlink(struct tcb* tcp) {
       }
       // if the program tries to read /proc/self/cwd, then treat it like
       // a CDE_end_getcwd call, returning a fake cwd:
+      //
+      // (note that we don't handle /proc/<pid>/cwd yet)
       else if (strcmp(tcp->opened_filename, "/proc/self/cwd") == 0) {
         // copied from CDE_end_getcwd
         char* sandboxed_pwd = extract_sandboxed_pwd(tcp->current_dir);
@@ -1108,6 +1126,27 @@ void CDE_begin_execve(struct tcb* tcp) {
 
       ptrace(PTRACE_SETREGS, tcp->pid, NULL, (long)&cur_regs);
     }
+
+    // if tcp->perceived_program_fullpath has been set, then it might be
+    // a RELATIVE PATH (e.g., ./googleearth-bin), so we need to make it
+    // into an ABSOLUTE PATH within cde-root/, but to only grab the
+    // component that comes after cde-root/, since that's what the
+    // program PERCEIVES its full path to be
+    if (tcp->perceived_program_fullpath) {
+      char* old_perceived_program_fullpath = tcp->perceived_program_fullpath;
+
+      char* redirected_path =
+        redirect_filename_into_cderoot(tcp->perceived_program_fullpath,
+                                       tcp->current_dir);
+
+      // extract_sandboxed_pwd (perhaps badly named for this scenario)
+      // extracts the part of redirected_path that comes AFTER cde-root/
+      // (note that extract_sandboxed_pwd does NOT malloc a new string)
+      tcp->perceived_program_fullpath = strdup(extract_sandboxed_pwd(redirected_path));
+
+      free(old_perceived_program_fullpath);
+    }
+
   }
   else {
     if (ld_linux_filename) {
