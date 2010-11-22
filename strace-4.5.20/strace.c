@@ -795,11 +795,8 @@ main(int argc, char *argv[])
       // /var contains 'volatile' temp files that change when system is
       // running normally
       //
-      // .Xauthority is used for X11 authentication via ssh, so we need to
+      // $HOME/.Xauthority is used for X11 authentication via ssh, so we need to
       // use the REAL version and not the one in cde-root/
-      //
-      // TODO: we're not ignoring .Xauthority anymore;
-      // hopefully that doesn't cause any problems
       //
       // ignore "/tmp" and "/tmp/*" since programs often put lots of
       // session-specific stuff into /tmp so DO NOT track files within
@@ -812,6 +809,12 @@ main(int argc, char *argv[])
       fputs("ignore_prefix=/var/\n", f);
       fputs("ignore_prefix=/tmp/\n", f);
       fputs("ignore_exact=/tmp\n", f);
+
+      // take into account accesses by both relative and absolute paths:
+      fputs("ignore_exact=.Xauthority\n", f);
+      fputs("ignore_exact=", f);
+      fputs(getenv("HOME"), f); // we're assuming $HOME does NOT end in a '/'
+      fputs("/.Xauthority\n", f);
 
       // these environment vars might contribute to 'overfitting'
       fputs("ignore_environment_var=DBUS_SESSION_BUS_ADDRESS\n", f);

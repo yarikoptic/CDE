@@ -206,13 +206,6 @@ static int ignore_path(char* filename) {
     return 1;
   }
 
-  // .Xauthority sometimes gives us trouble, so let's unconditionally
-  // ignore it ...
-  if (strcmp(basename(filename), ".Xauthority") == 0) {
-    return 1;
-  }
-
-
   // custom ignore paths, as specified in cde.ignore
   int i;
   for (i = 0; i < ignore_exact_paths_ind; i++) {
