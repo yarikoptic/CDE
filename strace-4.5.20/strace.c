@@ -796,8 +796,12 @@ main(int argc, char *argv[])
 
       // /dev, /proc, and /sys are special system directories with fake files
       //
-      // /var contains 'volatile' temp files that change when system is
-      // running normally
+      // some sub-directories within /var contains 'volatile' temp files
+      // that change when system is running normally
+      //
+      // (Note that it's a bit too much to simply ignore all of /var,
+      // since files in dirs like /var/lib might be required - e.g., see
+      // gnome-sudoku example)
       //
       // $HOME/.Xauthority is used for X11 authentication via ssh, so we need to
       // use the REAL version and not the one in cde-root/
@@ -810,7 +814,11 @@ main(int argc, char *argv[])
       fputs("ignore_prefix=/dev/\n", f);
       fputs("ignore_prefix=/proc/\n", f);
       fputs("ignore_prefix=/sys/\n", f);
-      fputs("ignore_prefix=/var/\n", f);
+      fputs("ignore_prefix=/var/cache/\n", f);
+      fputs("ignore_prefix=/var/lock/\n", f);
+      fputs("ignore_prefix=/var/log/\n", f);
+      fputs("ignore_prefix=/var/run/\n", f);
+      fputs("ignore_prefix=/var/tmp/\n", f);
       fputs("ignore_prefix=/tmp/\n", f);
       fputs("ignore_exact=/tmp\n", f);
 
