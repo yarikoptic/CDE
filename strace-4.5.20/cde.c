@@ -56,6 +56,16 @@ int ignore_prefix_paths_ind = 0;
 static char* ignore_envvars[100]; // each element should be an environment variable to ignore
 int ignore_envvars_ind = 0;
 
+
+// if you called cde-exec with the '-a' option, then CDE looks for a
+// file called cde.allow and only redirects paths mentioned in that file
+char CDE_use_allow_file = 0;
+static char* allow_exact_paths[100];
+int allow_exact_paths_ind = 0;
+static char* allow_prefix_paths[100];
+int allow_prefix_paths_ind = 0;
+
+
 // the absolute path to the cde-root/ directory, since that will be
 // where our fake filesystem starts. e.g., if cde_starting_pwd is
 //   /home/bob/cde-package/cde-root/home/alice/cool-experiment
@@ -198,7 +208,6 @@ static void make_mirror_dirs_in_cde_package(char* original_abspath, int pop_one)
 }
 
 
-// ignore these special paths:
 static int ignore_path(char* filename) {
   // sometimes you will get a BOGUS empty filename ... in that case,
   // simply ignore it (this might hide some true errors, though!!!)
@@ -206,21 +215,42 @@ static int ignore_path(char* filename) {
     return 1;
   }
 
-  // custom ignore paths, as specified in cde.ignore
-  int i;
-  for (i = 0; i < ignore_exact_paths_ind; i++) {
-    if (strcmp(filename, ignore_exact_paths[i]) == 0) {
-      return 1;
+  if (CDE_use_allow_file) {
+    // custom allow paths, as specified in cde.allow
+    int i;
+    for (i = 0; i < allow_exact_paths_ind; i++) {
+      if (strcmp(filename, allow_exact_paths[i]) == 0) {
+        return 0;
+      }
     }
+    for (i = 0; i < allow_prefix_paths_ind; i++) {
+      char* p = allow_prefix_paths[i];
+      if (strncmp(filename, p, strlen(p)) == 0) {
+        return 0;
+      }
+    }
+
+    return 1; // ignore by default
   }
-  for (i = 0; i < ignore_prefix_paths_ind; i++) {
-    char* p = ignore_prefix_paths[i];
-    if (strncmp(filename, p, strlen(p)) == 0) {
-      return 1;
+  else {
+    // custom ignore paths, as specified in cde.ignore
+    int i;
+    for (i = 0; i < ignore_exact_paths_ind; i++) {
+      if (strcmp(filename, ignore_exact_paths[i]) == 0) {
+        return 1;
+      }
     }
+    for (i = 0; i < ignore_prefix_paths_ind; i++) {
+      char* p = ignore_prefix_paths[i];
+      if (strncmp(filename, p, strlen(p)) == 0) {
+        return 1;
+      }
+    }
+
+    return 0; // allow by default
   }
 
-  return 0;
+  assert(0); // should never reach here
 }
 
 
@@ -2122,46 +2152,39 @@ void CDE_create_convenience_scripts(char** argv, int optind) {
   free(cde_script_name);
 }
 
-void CDE_add_ignore_prefix_path(char* p) {
-  assert(ignore_prefix_paths[ignore_prefix_paths_ind] == NULL);
-  ignore_prefix_paths[ignore_prefix_paths_ind] = strdup(p);
-  ignore_prefix_paths_ind++;
 
-  //fprintf(stderr, "CDE ignoring prefix path: '%s'\n",
-  //        ignore_prefix_paths[ignore_prefix_paths_ind - 1]);
+static void _add_to_array_internal(char** my_array, int* p_len, char* p, char* array_name) {
+  assert(my_array[*p_len] == NULL);
+  my_array[*p_len] = strdup(p);
 
-  if (ignore_prefix_paths_ind >= 100) {
-    fprintf(stderr, "Fatal error: more than 100 entries in ignore_prefix_paths\n");
+  //fprintf(stderr, "%s[%d] = '%s'\n", array_name, *p_len, my_array[*p_len]);
+
+  (*p_len)++;
+
+  if (*p_len >= 100) {
+    fprintf(stderr, "Fatal error: more than 100 entries in %s\n", array_name);
     exit(1);
   }
+}
+
+void CDE_add_ignore_prefix_path(char* p) {
+  _add_to_array_internal(ignore_prefix_paths, &ignore_prefix_paths_ind, p, "ignore_prefix_paths");
 }
 
 void CDE_add_ignore_exact_path(char* p) {
-  assert(ignore_exact_paths[ignore_exact_paths_ind] == NULL);
-  ignore_exact_paths[ignore_exact_paths_ind] = strdup(p);
-  ignore_exact_paths_ind++;
-
-  //fprintf(stderr, "CDE ignoring exact path: '%s'\n",
-  //        ignore_exact_paths[ignore_exact_paths_ind - 1]);
-
-  if (ignore_exact_paths_ind >= 100) {
-    fprintf(stderr, "Fatal error: more than 100 entries in ignore_exact_paths\n");
-    exit(1);
-  }
+  _add_to_array_internal(ignore_exact_paths, &ignore_exact_paths_ind, p, "ignore_exact_paths");
 }
 
 void CDE_add_ignore_envvar(char* p) {
-  assert(ignore_envvars[ignore_envvars_ind] == NULL);
-  ignore_envvars[ignore_envvars_ind] = strdup(p);
-  ignore_envvars_ind++;
+  _add_to_array_internal(ignore_envvars, &ignore_envvars_ind, p, "ignore_envvars");
+}
 
-  //fprintf(stderr, "CDE ignoring environment var: '%s'\n",
-  //        ignore_envvars[ignore_envvars_ind - 1]);
+void CDE_add_allow_prefix_path(char* p) {
+  _add_to_array_internal(allow_prefix_paths, &allow_prefix_paths_ind, p, "allow_prefix_paths");
+}
 
-  if (ignore_envvars_ind >= 100) {
-    fprintf(stderr, "Fatal error: more than 100 entries in ignore_envvars\n");
-    exit(1);
-  }
+void CDE_add_allow_exact_path(char* p) {
+  _add_to_array_internal(allow_exact_paths, &allow_exact_paths_ind, p, "allow_exact_paths");
 }
 
 
@@ -2250,6 +2273,80 @@ void CDE_init_ignore_paths() {
       }
     }
   }
+
+  fclose(f);
+}
+
+
+// only do this if CDE_use_allow_file is set (which implies
+// CDE_exec_mode is set)
+//
+// run AFTER options have been processed (so that we can pick up
+// '-a' option)
+void CDE_init_allow_paths() {
+  if (!CDE_use_allow_file) {
+    return;
+  }
+
+  memset(allow_exact_paths, 0, sizeof(allow_exact_paths));
+  memset(allow_prefix_paths, 0, sizeof(allow_prefix_paths));
+
+  allow_exact_paths_ind = 0;
+  allow_prefix_paths_ind = 0;
+
+  // look for a cde.allow file in $CDE_PACKAGE_DIR
+  // you must run this AFTER running CDE_init_pseudo_root_dir()
+  assert(*cde_pseudo_root_dir);
+  char* allow_file = format("%s/../cde.allow", cde_pseudo_root_dir);
+  FILE* f = fopen(allow_file, "r");
+  free(allow_file);
+
+  if (!f) {
+    fprintf(stderr, "Fatal error: missing cde.allow file (required for '-a' option)\n");
+    exit(1);
+  }
+
+
+  char* line = NULL;
+  size_t len = 0;
+  ssize_t read;
+  while ((read = getline(&line, &len, f)) != -1) {
+    assert(line[read-1] == '\n');
+    line[read-1] = '\0'; // strip of trailing newline
+
+    char* p;
+    char is_first_token = 1;
+    char set_id = -1;
+
+    for (p = strtok(line, "="); p; p = strtok(NULL, "=")) {
+      if (is_first_token) {
+        if (strcmp(p, "allow_exact") == 0) {
+          set_id = 1;
+        }
+        else if (strcmp(p, "allow_prefix") == 0) {
+          set_id = 2;
+        }
+        else {
+          fprintf(stderr, "Fatal error in cde.allow: unrecognized token '%s'\n", p);
+          exit(1);
+        }
+
+        is_first_token = 0;
+      }
+      else {
+        if (set_id == 1) {
+          CDE_add_allow_exact_path(p);
+        }
+        else {
+          assert(set_id == 2);
+          CDE_add_allow_prefix_path(p);
+        }
+        break;
+      }
+    }
+  }
+
+  fclose(f);
 }
 
 
