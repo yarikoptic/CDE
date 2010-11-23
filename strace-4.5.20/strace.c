@@ -816,6 +816,18 @@ main(int argc, char *argv[])
       fputs(getenv("HOME"), f); // we're assuming $HOME does NOT end in a '/'
       fputs("/.Xauthority\n", f);
 
+      // we gotta ignore /etc/resolv.conf or else Google Earth can't
+      // access the network when on another machine, so it won't work
+      // (and I think other network-facing apps might not work either!)
+      fputs("ignore_exact=/etc/resolv.conf\n", f);
+
+      // these other files might or might not be useful to ignore along
+      // with /etc/resolv.conf ... ignore these later if necessary
+      //fputs("ignore_exact=/etc/host.conf\n", f);
+      //fputs("ignore_exact=/etc/hosts\n", f);
+      //fputs("ignore_exact=/etc/nsswitch.conf\n", f);
+      //fputs("ignore_exact=/etc/gai.conf\n", f);
+
       // these environment vars might contribute to 'overfitting'
       fputs("ignore_environment_var=DBUS_SESSION_BUS_ADDRESS\n", f);
       fputs("ignore_environment_var=ORBIT_SOCKETDIR\n", f);
