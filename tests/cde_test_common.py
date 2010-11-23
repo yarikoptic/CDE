@@ -10,6 +10,7 @@ CDE_ROOT_DIR = 'cde-package/cde-root'
 # careful!!!
 def clear_cde_root():
   os.system('rm -rf cde-package')
+  os.system('rm -f cde.ignore')
   time.sleep(0.3) # to give os.system some time to work :)
 
 def generic_lib_checks():

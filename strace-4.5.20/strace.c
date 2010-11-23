@@ -844,6 +844,7 @@ main(int argc, char *argv[])
       fputs("ignore_environment_var=DBUS_SESSION_BUS_ADDRESS\n", f);
       fputs("ignore_environment_var=ORBIT_SOCKETDIR\n", f);
       fputs("ignore_environment_var=SESSION_MANAGER\n", f);
+      fputs("ignore_environment_var=XAUTHORITY\n", f);
      
       fclose(f);
     }
