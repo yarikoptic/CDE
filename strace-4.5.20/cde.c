@@ -852,7 +852,7 @@ void CDE_begin_execve(struct tcb* tcp) {
     // machines), then DO NOT use the ld-linux trick and simply
     // execve the file normally
     if (ignore_path(tcp->opened_filename)) {
-      goto done;
+      return;
     }
 
     redirected_path = redirect_filename_into_cderoot(tcp->opened_filename, tcp->current_dir);
