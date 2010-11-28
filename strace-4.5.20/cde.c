@@ -847,6 +847,14 @@ void CDE_begin_execve(struct tcb* tcp) {
 
   char* redirected_path = NULL;
   if (CDE_exec_mode) {
+    // if we're purposely ignoring a path to an executable (e.g.,
+    // ignoring "/bin/bash" to prevent crashes on certain Ubuntu
+    // machines), then DO NOT use the ld-linux trick and simply
+    // execve the file normally
+    if (ignore_path(tcp->opened_filename)) {
+      goto done;
+    }
+
     redirected_path = redirect_filename_into_cderoot(tcp->opened_filename, tcp->current_dir);
   }
 
