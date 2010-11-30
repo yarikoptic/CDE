@@ -200,24 +200,23 @@ int exitval;
 {
   if (CDE_exec_mode) {
     fprintf(ofp,
-            "CDE: automatic packaging of Code, Data, and Environment\n"
+            "CDEpack: Code, Data, and Environment packaging for Linux\n"
             "Copyright 2010 Philip Guo (pg@cs.stanford.edu)\n"
-            "http://www.stanford.edu/~pgbovine/cde.html\n\n"
+            "http://www.stanford.edu/~pgbovine/cdepack.html\n\n"
             "usage: cde-exec [options] [command within cde-root/ to run]\n");
   }
   else {
     fprintf(ofp,
-            "CDE: automatic packaging of Code, Data, and Environment\n"
+            "CDEpack: Code, Data, and Environment packaging for Linux\n"
             "Copyright 2010 Philip Guo (pg@cs.stanford.edu)\n"
-            "http://www.stanford.edu/~pgbovine/cde.html\n\n"
+            "http://www.stanford.edu/~pgbovine/cdepack.html\n\n"
             "usage: cde [options] [command to run and package]\n");
   }
 
   fprintf(ofp, "\nOptions\n");
   fprintf(ofp, "  -i <path prefix> :     Ignore all paths with this prefix\n");
   fprintf(ofp, "  -I <full path>   :     Ignore exact path\n");
-  fprintf(ofp, "  -E <environment var> : Do NOT use this environment var's value from cde.full-environment");
-
+  fprintf(ofp, "  -E <environment var> : Do NOT use this environment var's value from cde.full-environment\n");
   fprintf(ofp, "  -a : Only redirect paths specified in cde.allow (and ignore all others)\n");
 
 	exit(exitval);
