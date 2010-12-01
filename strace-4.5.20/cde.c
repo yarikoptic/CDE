@@ -2417,8 +2417,24 @@ void CDE_load_environment_vars() {
       }
     }
 
+    // ignore an invalid variable with an empty name or a name
+    // that's simply a newline character (some files have a trailing
+    // newline, which strtok picks up, ugh):
+    if (!name || (strcmp(name, "\n") == 0)) {
+      ignore_me = 1;
+    }
+
     if (!ignore_me) {
-      setenv(name, val, 1); // do it!!!
+      // subtle ... if val is NULL, then we should call setenv() with
+      // an empty string as val, NOT a NULL, since calling it with a
+      // NULL parameter will cause it to DELETE the environment
+      // variable, not set it to ""
+      if (val) {
+        setenv(name, val, 1);
+      }
+      else {
+        setenv(name, "", 1);
+      }
     }
     else {
       //printf("ignored '%s' => '%s'\n", name, val);
