@@ -868,7 +868,12 @@ main(int argc, char *argv[])
 		tcbtab[tcp - tcbtab[0]] = &tcbtab[0][tcp - tcbtab[0]];
 
 	outf = stderr;
-	interactive = 1;
+
+  // pgbovine - set interactive to 0 by default (rather than 1) so that we
+  // pass signals (e.g., SIGINT caused by Ctrl-C ) through to the child process
+	//interactive = 1;
+	interactive = 0;
+ 
 	set_sortby(DEFAULT_SORTBY);
 	set_personality(DEFAULT_PERSONALITY);
 
