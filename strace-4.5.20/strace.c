@@ -92,7 +92,6 @@ extern char *optarg;
 
 // pgbovine
 extern char CDE_exec_mode;
-extern char CDE_use_allow_file;
 extern void alloc_tcb_CDE_fields(struct tcb* tcp);
 extern void free_tcb_CDE_fields(struct tcb* tcp);
 extern void copy_file(char* src_filename, char* dst_filename);
@@ -103,6 +102,8 @@ extern void CDE_init_tcb_dir_fields(struct tcb* tcp);
 extern void CDE_init_pseudo_root_dir(void);
 extern void CDE_add_ignore_prefix_path(char* p);
 extern void CDE_add_ignore_exact_path(char* p);
+extern void CDE_add_allow_prefix_path(char* p);
+extern void CDE_add_allow_exact_path(char* p);
 extern void CDE_add_ignore_envvar(char* p);
 extern void CDE_create_convenience_scripts(char** argv, int optind);
 extern char cde_starting_pwd[MAXPATHLEN];
@@ -214,10 +215,11 @@ int exitval;
   }
 
   fprintf(ofp, "\nOptions\n");
-  fprintf(ofp, "  -i <path prefix> :     Ignore all paths with this prefix\n");
-  fprintf(ofp, "  -I <full path>   :     Ignore exact path\n");
+  fprintf(ofp, "  -i <path prefix> : Ignore all paths with this prefix\n");
+  fprintf(ofp, "  -I <full path>   : Ignore exact path\n");
+  fprintf(ofp, "  -a <path prefix> : Allow all paths with this prefix (overrides ignore)\n");
+  fprintf(ofp, "  -A <full path>   : Allow exact path (overrides ignore)\n");
   fprintf(ofp, "  -E <environment var> : Do NOT use this environment var's value from cde.full-environment\n");
-  fprintf(ofp, "  -a : Only redirect paths specified in cde.allow (and ignore all others)\n");
 
 	exit(exitval);
 }
@@ -887,11 +889,11 @@ main(int argc, char *argv[])
 	qualify("verbose=all");
 	qualify("signal=all");
 	while ((c = getopt(argc, argv,
-		"+acCdfFhqrtTvVxz"
+		"+cCdfFhqrtTvVxz"
 #ifndef USE_PROCFS
 		"D"
 #endif
-		"e:o:O:p:s:S:u:E:i:I:")) != EOF) {
+		"a:A:e:o:O:p:s:S:u:E:i:I:")) != EOF) {
 		switch (c) {
 		case 'c':
 			if (cflag == CFLAG_BOTH) {
@@ -964,11 +966,13 @@ main(int argc, char *argv[])
 			break;
 		case 'a':
       // pgbovine - hijack for the '-a' option
-      if (CDE_exec_mode) {
-        CDE_use_allow_file = 1;
-      }
+      CDE_add_allow_prefix_path(optarg);
 			//acolumn = atoi(optarg);
 			break;
+		case 'A':
+      // pgbovine - hijack for the '-A' option
+      CDE_add_allow_exact_path(optarg);
+      break;
 		case 'e':
 			qualify(optarg);
 			break;
@@ -1027,11 +1031,6 @@ main(int argc, char *argv[])
 
 	if ((optind == argc) == !pflag_seen)
 		usage(stderr, 1);
-
-
-  // pgbovine - run this AFTER command-line options have been processed
-  // (so that we can see whether -a is activated)
-  CDE_init_allow_paths();
 
 
 	if (!followfork)

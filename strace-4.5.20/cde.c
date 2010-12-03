@@ -56,10 +56,7 @@ int ignore_prefix_paths_ind = 0;
 static char* ignore_envvars[100]; // each element should be an environment variable to ignore
 int ignore_envvars_ind = 0;
 
-
-// if you called cde-exec with the '-a' option, then CDE looks for a
-// file called cde.allow and only redirects paths mentioned in that file
-char CDE_use_allow_file = 0;
+// these override their ignore path counterparts
 static char* allow_exact_paths[100];
 int allow_exact_paths_ind = 0;
 static char* allow_prefix_paths[100];
@@ -215,42 +212,39 @@ static int ignore_path(char* filename) {
     return 1;
   }
 
-  if (CDE_use_allow_file) {
-    // custom allow paths, as specified in cde.allow
-    int i;
-    for (i = 0; i < allow_exact_paths_ind; i++) {
-      if (strcmp(filename, allow_exact_paths[i]) == 0) {
-        return 0;
-      }
-    }
-    for (i = 0; i < allow_prefix_paths_ind; i++) {
-      char* p = allow_prefix_paths[i];
-      if (strncmp(filename, p, strlen(p)) == 0) {
-        return 0;
-      }
-    }
+  int i;
 
-    return 1; // ignore by default
+  // allow paths override ignore paths
+  for (i = 0; i < allow_exact_paths_ind; i++) {
+    if (strcmp(filename, allow_exact_paths[i]) == 0) {
+      return 0;
+    }
   }
-  else {
-    // custom ignore paths, as specified in cde.ignore
-    int i;
-    for (i = 0; i < ignore_exact_paths_ind; i++) {
-      if (strcmp(filename, ignore_exact_paths[i]) == 0) {
-        return 1;
-      }
+  for (i = 0; i < allow_prefix_paths_ind; i++) {
+    char* p = allow_prefix_paths[i];
+    if (strncmp(filename, p, strlen(p)) == 0) {
+      return 0;
     }
-    for (i = 0; i < ignore_prefix_paths_ind; i++) {
-      char* p = ignore_prefix_paths[i];
-      if (strncmp(filename, p, strlen(p)) == 0) {
-        return 1;
-      }
-    }
-
-    return 0; // allow by default
   }
 
-  assert(0); // should never reach here
+  for (i = 0; i < ignore_exact_paths_ind; i++) {
+    if (strcmp(filename, ignore_exact_paths[i]) == 0) {
+      return 1;
+    }
+  }
+  for (i = 0; i < ignore_prefix_paths_ind; i++) {
+    char* p = ignore_prefix_paths[i];
+    if (strncmp(filename, p, strlen(p)) == 0) {
+      return 1;
+    }
+  }
+
+
+  // do NOT ignore by default.  if you want to ignore everything except
+  // for what's explicitly specified by 'allow' directives, then
+  // use an option like ignore_prefix=/ (to ignore everything) and then
+  // add allow_prefix= and allow_exact= directives accordingly
+  return 0;
 }
 
 
@@ -2183,10 +2177,6 @@ void CDE_add_ignore_exact_path(char* p) {
   _add_to_array_internal(ignore_exact_paths, &ignore_exact_paths_ind, p, "ignore_exact_paths");
 }
 
-void CDE_add_ignore_envvar(char* p) {
-  _add_to_array_internal(ignore_envvars, &ignore_envvars_ind, p, "ignore_envvars");
-}
-
 void CDE_add_allow_prefix_path(char* p) {
   _add_to_array_internal(allow_prefix_paths, &allow_prefix_paths_ind, p, "allow_prefix_paths");
 }
@@ -2195,20 +2185,30 @@ void CDE_add_allow_exact_path(char* p) {
   _add_to_array_internal(allow_exact_paths, &allow_exact_paths_ind, p, "allow_exact_paths");
 }
 
+void CDE_add_ignore_envvar(char* p) {
+  _add_to_array_internal(ignore_envvars, &ignore_envvars_ind, p, "ignore_envvars");
+}
 
-// initialize ignore_exact_paths, ignore_prefix_paths, and ignore_envvars
-// based on the cde.ignore file, which has the grammar:
-// ignore_prefix=<path prefix to ignore>
+
+// initialize arrays based on the cde.ignore file, which has the grammar:
 // ignore_exact=<exact path to ignore>
+// ignore_prefix=<path prefix to ignore>
+// allow_exact=<exact path to allow>
+// allow_prefix=<path prefix to allow>
 // ignore_environment_var=<environment variable to ignore>
 void CDE_init_ignore_paths() {
   memset(ignore_exact_paths, 0, sizeof(ignore_exact_paths));
   memset(ignore_prefix_paths, 0, sizeof(ignore_prefix_paths));
+  memset(allow_exact_paths, 0, sizeof(allow_exact_paths));
+  memset(allow_prefix_paths, 0, sizeof(allow_prefix_paths));
   memset(ignore_envvars, 0, sizeof(ignore_envvars));
 
   ignore_exact_paths_ind = 0;
   ignore_prefix_paths_ind = 0;
+  allow_exact_paths_ind = 0;
+  allow_prefix_paths_ind = 0;
   ignore_envvars_ind = 0;
+
 
   FILE* f = NULL;
 
@@ -2259,6 +2259,12 @@ void CDE_init_ignore_paths() {
         else if (strcmp(p, "ignore_environment_var") == 0) {
           set_id = 3;
         }
+        else if (strcmp(p, "allow_exact") == 0) {
+          set_id = 4;
+        }
+        else if (strcmp(p, "allow_prefix") == 0) {
+          set_id = 5;
+        }
         else {
           fprintf(stderr, "Fatal error in cde.ignore: unrecognized token '%s'\n", p);
           exit(1);
@@ -2267,16 +2273,26 @@ void CDE_init_ignore_paths() {
         is_first_token = 0;
       }
       else {
-        if (set_id == 1) {
-          CDE_add_ignore_exact_path(p);
+        switch (set_id) {
+          case 1:
+            CDE_add_ignore_exact_path(p);
+            break;
+          case 2:
+            CDE_add_ignore_prefix_path(p);
+            break;
+          case 3:
+            CDE_add_ignore_envvar(p);
+            break;
+          case 4:
+            CDE_add_allow_exact_path(p);
+            break;
+          case 5:
+            CDE_add_allow_prefix_path(p);
+            break;
+          default:
+            assert(0);
         }
-        else if (set_id == 2) {
-          CDE_add_ignore_prefix_path(p);
-        }
-        else {
-          assert(set_id == 3);
-          CDE_add_ignore_envvar(p);
-        }
+
         break;
       }
     }
@@ -2286,16 +2302,7 @@ void CDE_init_ignore_paths() {
 }
 
 
-// only do this if CDE_use_allow_file is set (which implies
-// CDE_exec_mode is set)
-//
-// run AFTER options have been processed (so that we can pick up
-// '-a' option)
 void CDE_init_allow_paths() {
-  if (!CDE_use_allow_file) {
-    return;
-  }
-
   memset(allow_exact_paths, 0, sizeof(allow_exact_paths));
   memset(allow_prefix_paths, 0, sizeof(allow_prefix_paths));
 
