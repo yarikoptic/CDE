@@ -100,15 +100,10 @@ extern void CDE_create_path_symlink_dirs(void);
 extern void CDE_create_toplevel_symlink_dirs(void);
 extern void CDE_init_tcb_dir_fields(struct tcb* tcp);
 extern void CDE_init_pseudo_root_dir(void);
-extern void CDE_add_ignore_prefix_path(char* p);
-extern void CDE_add_ignore_exact_path(char* p);
-extern void CDE_add_allow_prefix_path(char* p);
-extern void CDE_add_allow_exact_path(char* p);
-extern void CDE_add_ignore_envvar(char* p);
 extern void CDE_create_convenience_scripts(char** argv, int optind);
 extern char cde_starting_pwd[MAXPATHLEN];
 extern char cde_pseudo_root_dir[MAXPATHLEN];
-extern void CDE_init_ignore_paths(void);
+extern void CDE_init_options(void);
 extern void CDE_init_allow_paths(void);
 extern void CDE_load_environment_vars(void);
 
@@ -204,22 +199,24 @@ int exitval;
             "CDEpack: Code, Data, and Environment packaging for Linux\n"
             "Copyright 2010 Philip Guo (pg@cs.stanford.edu)\n"
             "http://www.stanford.edu/~pgbovine/cdepack.html\n\n"
-            "usage: cde-exec [options] [command within cde-root/ to run]\n");
+            "usage: cde-exec [command within cde-root/ to run]\n");
   }
   else {
     fprintf(ofp,
             "CDEpack: Code, Data, and Environment packaging for Linux\n"
             "Copyright 2010 Philip Guo (pg@cs.stanford.edu)\n"
             "http://www.stanford.edu/~pgbovine/cdepack.html\n\n"
-            "usage: cde [options] [command to run and package]\n");
+            "usage: cde [command to run and package]\n");
   }
 
+  /*
   fprintf(ofp, "\nOptions\n");
   fprintf(ofp, "  -i <path prefix> : Ignore all paths with this prefix\n");
   fprintf(ofp, "  -I <full path>   : Ignore exact path\n");
   fprintf(ofp, "  -a <path prefix> : Allow all paths with this prefix (overrides ignore)\n");
   fprintf(ofp, "  -A <full path>   : Allow exact path (overrides ignore)\n");
   fprintf(ofp, "  -E <environment var> : Do NOT use this environment var's value from cde.full-environment\n");
+  */
 
 	exit(exitval);
 }
@@ -777,7 +774,7 @@ main(int argc, char *argv[])
   if (strcmp(basename(progname), "cde-exec") == 0) {
     CDE_exec_mode = 1;
 
-    // must do this before running CDE_init_ignore_paths()
+    // must do this before running CDE_init_options()
     CDE_init_pseudo_root_dir();
   }
   else {
@@ -786,14 +783,17 @@ main(int argc, char *argv[])
     mkdir(CDE_PACKAGE_DIR, 0777);
     mkdir(CDE_ROOT_DIR, 0777);
 
-    // if cde.ignore doesn't yet exist, create it in pwd and seed it
+    // if cde.options doesn't yet exist, create it in pwd and seed it
     // with default values that are useful to ignore in practice
     //
-    // do this BEFORE CDE_init_ignore_paths() so that we pick up those
+    // do this BEFORE CDE_init_options() so that we pick up those
     // ignored values
-    struct stat cde_ignore_stat;
-    if (stat("cde.ignore", &cde_ignore_stat)) {
-      FILE* f = fopen("cde.ignore", "w");
+    struct stat cde_options_stat;
+    if (stat("cde.options", &cde_options_stat)) {
+      FILE* f = fopen("cde.options", "w");
+
+      fputs(CDE_OPTIONS_VERSION_NUM, f);
+      fputs(" (do not alter this first line!)\n", f);
 
       // /dev, /proc, and /sys are special system directories with fake files
       //
@@ -812,6 +812,7 @@ main(int argc, char *argv[])
       // there, or else you will risk severely 'overfitting' and ruining
       // portability across machines.  it's safe to assume that all Linux
       // distros have a /tmp directory that anybody can write into
+      fputs("\n# These directories often contain pseudo-files that shouldn't be tracked\n", f);
       fputs("ignore_prefix=/dev/\n", f);
       fputs("ignore_prefix=/proc/\n", f);
       fputs("ignore_prefix=/sys/\n", f);
@@ -823,6 +824,7 @@ main(int argc, char *argv[])
       fputs("ignore_prefix=/tmp/\n", f);
       fputs("ignore_exact=/tmp\n", f);
 
+      fputs("\n# Ignore .Xauthority to allow X Windows programs to work\n", f);
       // take into account accesses by both relative and absolute paths:
       fputs("ignore_exact=.Xauthority\n", f);
       fputs("ignore_exact=", f);
@@ -832,6 +834,7 @@ main(int argc, char *argv[])
       // we gotta ignore /etc/resolv.conf or else Google Earth can't
       // access the network when on another machine, so it won't work
       // (and I think other network-facing apps might not work either!)
+      fputs("\n# Ignore so that networking can work properly\n", f);
       fputs("ignore_exact=/etc/resolv.conf\n", f);
 
       // these other files might or might not be useful to ignore along
@@ -841,7 +844,21 @@ main(int argc, char *argv[])
       //fputs("ignore_exact=/etc/nsswitch.conf\n", f);
       //fputs("ignore_exact=/etc/gai.conf\n", f);
 
-      // these environment vars might contribute to 'overfitting'
+      // ewencp also suggests looking into ignoring these other
+      // networking-related files:
+      /* Hmm, good point. There's probably lots -- if you're trying to
+         run a server, /etc/hostname, /etc/hosts.allow and
+         /etc/hosts.deny could all be problematic.  /etc/hosts could be
+         a problem for client or server, although its unusual to have
+         much in there. One way it could definitely be a problem is if
+         the hostname is in /etc/hosts and you want to use it as a
+         server, e.g. I run on my machine (ahoy) the server and client,
+         which appears in /etc/hosts, and then when cde-exec runs it
+         ends up returning 127.0.0.1.  But for all of these, I actually
+         don't know when the file gets read, so I'm not certain any of
+         them are really a problem. */
+
+      fputs("\n# These environment vars might lead to 'overfitting' and hinder portability\n", f);
       fputs("ignore_environment_var=DBUS_SESSION_BUS_ADDRESS\n", f);
       fputs("ignore_environment_var=ORBIT_SOCKETDIR\n", f);
       fputs("ignore_environment_var=SESSION_MANAGER\n", f);
@@ -851,9 +868,9 @@ main(int argc, char *argv[])
     }
   }
 
-  // do this BEFORE initializing command-line options since -i and -I
-  // will rely on it
-  CDE_init_ignore_paths();
+  // do this AFTER creating cde.options but BEFORE initializing
+  // command-line options since some options (e.g., -i, -I) might rely on it
+  CDE_init_options();
 
 
 	/* Allocate the initial tcbtab.  */
@@ -932,11 +949,11 @@ main(int argc, char *argv[])
 		case 'i':
 			//iflag++;
       // pgbovine - hijack for the '-i' option
-      CDE_add_ignore_prefix_path(optarg);
+      //CDE_add_ignore_prefix_path(optarg);
 			break;
 		case 'I':
       // pgbovine - hijack for the '-I' option
-      CDE_add_ignore_exact_path(optarg);
+      //CDE_add_ignore_exact_path(optarg);
 			break;
 		case 'q':
 			qflag++;
@@ -966,12 +983,12 @@ main(int argc, char *argv[])
 			break;
 		case 'a':
       // pgbovine - hijack for the '-a' option
-      CDE_add_allow_prefix_path(optarg);
+      //CDE_add_allow_prefix_path(optarg);
 			//acolumn = atoi(optarg);
 			break;
 		case 'A':
       // pgbovine - hijack for the '-A' option
-      CDE_add_allow_exact_path(optarg);
+      //CDE_add_allow_exact_path(optarg);
       break;
 		case 'e':
 			qualify(optarg);
@@ -1014,7 +1031,7 @@ main(int argc, char *argv[])
 			break;
 		case 'E':
       // pgbovine - hijack for the '-E' option
-      CDE_add_ignore_envvar(optarg);
+      //CDE_add_ignore_envvar(optarg);
       /*
 			if (putenv(optarg) < 0) {
 				fprintf(stderr, "%s: out of memory\n",

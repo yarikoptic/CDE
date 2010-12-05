@@ -1,3 +1,26 @@
+/* 
+
+CDEpack: Code, Data, and Environment packaging for Linux
+http://www.stanford.edu/~pgbovine/cdepack.html
+Philip Guo
+
+[I usually refer to this project by its original name: 'CDE']
+
+CDE is currently licensed under GPL v3:
+
+  Copyright (c) 2010 Philip Guo <pg@cs.stanford.edu>
+
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+*/
 
 
 /* System call calling conventions:
@@ -47,20 +70,24 @@ static void create_symlink_in_cde_root(char* filename, char* child_current_pwd);
 // the true pwd of the cde executable AT THE START of execution
 char cde_starting_pwd[MAXPATHLEN];
 
-// each non-null element should be a path to ignore in ignore_path()
-// these arrays are initialized in CDE_init_ignore_paths()
+// these arrays are initialized in CDE_init_options()
 static char* ignore_exact_paths[100];
-int ignore_exact_paths_ind = 0;
 static char* ignore_prefix_paths[100];
+static char* ignore_substr_paths[100];
+int ignore_exact_paths_ind = 0;
 int ignore_prefix_paths_ind = 0;
-static char* ignore_envvars[100]; // each element should be an environment variable to ignore
-int ignore_envvars_ind = 0;
+int ignore_substr_paths_ind = 0;
 
 // these override their ignore path counterparts
-static char* allow_exact_paths[100];
-int allow_exact_paths_ind = 0;
-static char* allow_prefix_paths[100];
-int allow_prefix_paths_ind = 0;
+static char* redirect_exact_paths[100];
+static char* redirect_prefix_paths[100];
+static char* redirect_substr_paths[100];
+int redirect_exact_paths_ind = 0;
+int redirect_prefix_paths_ind = 0;
+int redirect_substr_paths_ind = 0;
+
+static char* ignore_envvars[100]; // each element should be an environment variable to ignore
+int ignore_envvars_ind = 0;
 
 
 // the absolute path to the cde-root/ directory, since that will be
@@ -214,18 +241,24 @@ static int ignore_path(char* filename) {
 
   int i;
 
-  // allow paths override ignore paths
-  for (i = 0; i < allow_exact_paths_ind; i++) {
-    if (strcmp(filename, allow_exact_paths[i]) == 0) {
+  // redirect paths override ignore paths
+  for (i = 0; i < redirect_exact_paths_ind; i++) {
+    if (strcmp(filename, redirect_exact_paths[i]) == 0) {
       return 0;
     }
   }
-  for (i = 0; i < allow_prefix_paths_ind; i++) {
-    char* p = allow_prefix_paths[i];
+  for (i = 0; i < redirect_prefix_paths_ind; i++) {
+    char* p = redirect_prefix_paths[i];
     if (strncmp(filename, p, strlen(p)) == 0) {
       return 0;
     }
   }
+  for (i = 0; i < redirect_substr_paths_ind; i++) {
+    if (strstr(filename, redirect_substr_paths[i])) {
+      return 0;
+    }
+  }
+
 
   for (i = 0; i < ignore_exact_paths_ind; i++) {
     if (strcmp(filename, ignore_exact_paths[i]) == 0) {
@@ -238,12 +271,17 @@ static int ignore_path(char* filename) {
       return 1;
     }
   }
+  for (i = 0; i < ignore_substr_paths_ind; i++) {
+    if (strstr(filename, ignore_substr_paths[i])) {
+      return 1;
+    }
+  }
 
 
   // do NOT ignore by default.  if you want to ignore everything except
-  // for what's explicitly specified by 'allow' directives, then
-  // use an option like ignore_prefix=/ (to ignore everything) and then
-  // add allow_prefix= and allow_exact= directives accordingly
+  // for what's explicitly specified by 'redirect' directives, then
+  // use an option like "ignore_prefix=/" (to ignore everything) and
+  // then add redirect_prefix= and redirect_exact= directives accordingly
   return 0;
 }
 
@@ -2159,6 +2197,7 @@ static void _add_to_array_internal(char** my_array, int* p_len, char* p, char* a
   assert(my_array[*p_len] == NULL);
   my_array[*p_len] = strdup(p);
 
+  // debug printf
   //fprintf(stderr, "%s[%d] = '%s'\n", array_name, *p_len, my_array[*p_len]);
 
   (*p_len)++;
@@ -2169,20 +2208,28 @@ static void _add_to_array_internal(char** my_array, int* p_len, char* p, char* a
   }
 }
 
-void CDE_add_ignore_prefix_path(char* p) {
-  _add_to_array_internal(ignore_prefix_paths, &ignore_prefix_paths_ind, p, "ignore_prefix_paths");
-}
-
 void CDE_add_ignore_exact_path(char* p) {
   _add_to_array_internal(ignore_exact_paths, &ignore_exact_paths_ind, p, "ignore_exact_paths");
 }
 
-void CDE_add_allow_prefix_path(char* p) {
-  _add_to_array_internal(allow_prefix_paths, &allow_prefix_paths_ind, p, "allow_prefix_paths");
+void CDE_add_ignore_prefix_path(char* p) {
+  _add_to_array_internal(ignore_prefix_paths, &ignore_prefix_paths_ind, p, "ignore_prefix_paths");
 }
 
-void CDE_add_allow_exact_path(char* p) {
-  _add_to_array_internal(allow_exact_paths, &allow_exact_paths_ind, p, "allow_exact_paths");
+void CDE_add_ignore_substr_path(char* p) {
+  _add_to_array_internal(ignore_substr_paths, &ignore_substr_paths_ind, p, "ignore_substr_paths");
+}
+
+void CDE_add_redirect_exact_path(char* p) {
+  _add_to_array_internal(redirect_exact_paths, &redirect_exact_paths_ind, p, "redirect_exact_paths");
+}
+
+void CDE_add_redirect_prefix_path(char* p) {
+  _add_to_array_internal(redirect_prefix_paths, &redirect_prefix_paths_ind, p, "redirect_prefix_paths");
+}
+
+void CDE_add_redirect_substr_path(char* p) {
+  _add_to_array_internal(redirect_substr_paths, &redirect_substr_paths_ind, p, "redirect_substr_paths");
 }
 
 void CDE_add_ignore_envvar(char* p) {
@@ -2190,52 +2237,61 @@ void CDE_add_ignore_envvar(char* p) {
 }
 
 
-// initialize arrays based on the cde.ignore file, which has the grammar:
+// initialize arrays based on the cde.options file, which has the grammar:
+//
 // ignore_exact=<exact path to ignore>
 // ignore_prefix=<path prefix to ignore>
-// allow_exact=<exact path to allow>
-// allow_prefix=<path prefix to allow>
+// ignore_substr=<path substring to ignore>
+// redirect_exact=<exact path to allow>
+// redirect_prefix=<path prefix to allow>
+// redirect_substr=<path substring to allow>
 // ignore_environment_var=<environment variable to ignore>
-void CDE_init_ignore_paths() {
-  memset(ignore_exact_paths, 0, sizeof(ignore_exact_paths));
-  memset(ignore_prefix_paths, 0, sizeof(ignore_prefix_paths));
-  memset(allow_exact_paths, 0, sizeof(allow_exact_paths));
-  memset(allow_prefix_paths, 0, sizeof(allow_prefix_paths));
-  memset(ignore_envvars, 0, sizeof(ignore_envvars));
+void CDE_init_options() {
+  memset(ignore_exact_paths,    0, sizeof(ignore_exact_paths));
+  memset(ignore_prefix_paths,   0, sizeof(ignore_prefix_paths));
+  memset(ignore_substr_paths,   0, sizeof(ignore_substr_paths));
+  memset(redirect_exact_paths,  0, sizeof(redirect_exact_paths));
+  memset(redirect_prefix_paths, 0, sizeof(redirect_prefix_paths));
+  memset(redirect_substr_paths, 0, sizeof(redirect_substr_paths));
+  memset(ignore_envvars,        0, sizeof(ignore_envvars));
 
   ignore_exact_paths_ind = 0;
   ignore_prefix_paths_ind = 0;
-  allow_exact_paths_ind = 0;
-  allow_prefix_paths_ind = 0;
+  ignore_substr_paths_ind = 0;
+  redirect_exact_paths_ind = 0;
+  redirect_prefix_paths_ind = 0;
+  redirect_substr_paths_ind = 0;
   ignore_envvars_ind = 0;
 
 
   FILE* f = NULL;
 
   if (CDE_exec_mode) {
-    // look for a cde.ignore file in $CDE_PACKAGE_DIR
+    // look for a cde.options file in $CDE_PACKAGE_DIR
 
     // you must run this AFTER running CDE_init_pseudo_root_dir()
     assert(*cde_pseudo_root_dir);
-    char* ignore_file = format("%s/../cde.ignore", cde_pseudo_root_dir);
-    f = fopen(ignore_file, "r");
-    free(ignore_file);
+    char* options_file = format("%s/../cde.options", cde_pseudo_root_dir);
+    f = fopen(options_file, "r");
+    free(options_file);
   }
   else {
-    // look for a cde.ignore file in pwd
-    f = fopen("cde.ignore", "r");
+    // look for a cde.options file in pwd
+    f = fopen("cde.options", "r");
 
     // if found, copy it into the package
     if (f) {
-      copy_file("cde.ignore", CDE_PACKAGE_DIR "/cde.ignore");
+      copy_file("cde.options", CDE_PACKAGE_DIR "/cde.options");
     }
   }
 
   if (!f) {
-    fprintf(stderr, "Fatal error: missing cde.ignore file\n");
+    fprintf(stderr, "Fatal error: missing cde.options file\n");
     exit(1);
   }
 
+
+  char is_first_line = 1;
 
   char* line = NULL;
   size_t len = 0;
@@ -2243,6 +2299,22 @@ void CDE_init_ignore_paths() {
   while ((read = getline(&line, &len, f)) != -1) {
     assert(line[read-1] == '\n');
     line[read-1] = '\0'; // strip of trailing newline
+
+    // make sure there's an appropriate version number on first line
+    if (is_first_line) {
+      if (strncmp(line, CDE_OPTIONS_VERSION_NUM, strlen(CDE_OPTIONS_VERSION_NUM)) != 0) {
+        fprintf(stderr, "Error: cde.options file incompatible with this version of cde ('%s')\n",
+                CDE_OPTIONS_VERSION_NUM);
+        exit(1);
+      }
+      is_first_line = 0;
+      continue;
+    }
+
+    // ignore blank or comment lines
+    if (line[0] == '\0' || line[0] == '#') {
+      continue;
+    }
 
     char* p;
     char is_first_token = 1;
@@ -2259,14 +2331,20 @@ void CDE_init_ignore_paths() {
         else if (strcmp(p, "ignore_environment_var") == 0) {
           set_id = 3;
         }
-        else if (strcmp(p, "allow_exact") == 0) {
+        else if (strcmp(p, "redirect_exact") == 0) {
           set_id = 4;
         }
-        else if (strcmp(p, "allow_prefix") == 0) {
+        else if (strcmp(p, "redirect_prefix") == 0) {
           set_id = 5;
         }
+        else if (strcmp(p, "ignore_substr") == 0) {
+          set_id = 6;
+        }
+        else if (strcmp(p, "redirect_substr") == 0) {
+          set_id = 7;
+        }
         else {
-          fprintf(stderr, "Fatal error in cde.ignore: unrecognized token '%s'\n", p);
+          fprintf(stderr, "Fatal error in cde.options: unrecognized token '%s'\n", p);
           exit(1);
         }
 
@@ -2284,78 +2362,21 @@ void CDE_init_ignore_paths() {
             CDE_add_ignore_envvar(p);
             break;
           case 4:
-            CDE_add_allow_exact_path(p);
+            CDE_add_redirect_exact_path(p);
             break;
           case 5:
-            CDE_add_allow_prefix_path(p);
+            CDE_add_redirect_prefix_path(p);
+            break;
+          case 6:
+            CDE_add_ignore_substr_path(p);
+            break;
+          case 7:
+            CDE_add_redirect_substr_path(p);
             break;
           default:
             assert(0);
         }
 
-        break;
-      }
-    }
-  }
-
-  fclose(f);
-}
-
-
-void CDE_init_allow_paths() {
-  memset(allow_exact_paths, 0, sizeof(allow_exact_paths));
-  memset(allow_prefix_paths, 0, sizeof(allow_prefix_paths));
-
-  allow_exact_paths_ind = 0;
-  allow_prefix_paths_ind = 0;
-
-  // look for a cde.allow file in $CDE_PACKAGE_DIR
-  // you must run this AFTER running CDE_init_pseudo_root_dir()
-  assert(*cde_pseudo_root_dir);
-  char* allow_file = format("%s/../cde.allow", cde_pseudo_root_dir);
-  FILE* f = fopen(allow_file, "r");
-  free(allow_file);
-
-  if (!f) {
-    fprintf(stderr, "Fatal error: missing cde.allow file (required for '-a' option)\n");
-    exit(1);
-  }
-
-
-  char* line = NULL;
-  size_t len = 0;
-  ssize_t read;
-  while ((read = getline(&line, &len, f)) != -1) {
-    assert(line[read-1] == '\n');
-    line[read-1] = '\0'; // strip of trailing newline
-
-    char* p;
-    char is_first_token = 1;
-    char set_id = -1;
-
-    for (p = strtok(line, "="); p; p = strtok(NULL, "=")) {
-      if (is_first_token) {
-        if (strcmp(p, "allow_exact") == 0) {
-          set_id = 1;
-        }
-        else if (strcmp(p, "allow_prefix") == 0) {
-          set_id = 2;
-        }
-        else {
-          fprintf(stderr, "Fatal error in cde.allow: unrecognized token '%s'\n", p);
-          exit(1);
-        }
-
-        is_first_token = 0;
-      }
-      else {
-        if (set_id == 1) {
-          CDE_add_allow_exact_path(p);
-        }
-        else {
-          assert(set_id == 2);
-          CDE_add_allow_prefix_path(p);
-        }
         break;
       }
     }

@@ -1,4 +1,6 @@
-# copy in all the CDE source code in this directory first before running this test
+# copy in all the contents of the CDE/strace-4.5.20 source code into
+# this directory first before running this test
+
 import sys
 sys.path.insert(0, '..')
 from cde_test_common import *

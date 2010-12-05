@@ -1,5 +1,28 @@
+/* 
+
+CDEpack: Code, Data, and Environment packaging for Linux
+http://www.stanford.edu/~pgbovine/cdepack.html
+Philip Guo
+
+[I usually refer to this project by its original name: 'CDE']
+
+CDE is currently licensed under GPL v3:
+
+  Copyright (c) 2010 Philip Guo <pg@cs.stanford.edu>
+
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+*/
+
 // mini-library for manipulating file paths on UNIX-like systems
-// by Philip Guo
 
 #include "paths.h"
 
