@@ -53,6 +53,7 @@
 #include <limits.h>
 #include <dirent.h>
 
+#include <sys/utsname.h> // pgbovine
 #include <sys/mman.h> // pgbovine
 
 #ifdef LINUX
@@ -782,6 +783,20 @@ main(int argc, char *argv[])
 
     mkdir(CDE_PACKAGE_DIR, 0777);
     mkdir(CDE_ROOT_DIR, 0777);
+
+    // collect uname information in CDE_PACKAGE_DIR/cde.uname
+    struct utsname uname_info;
+    if (uname(&uname_info) >= 0) {
+      FILE* uname_f = fopen(CDE_PACKAGE_DIR "/cde.uname", "w");
+      if (uname_f) {
+        fprintf(uname_f, "uname: '%s' '%s' '%s' '%s'\n",
+                          uname_info.sysname,
+                          uname_info.release,
+                          uname_info.version,
+                          uname_info.machine);
+        fclose(uname_f);
+      }
+    }
 
     // if cde.options doesn't yet exist, create it in pwd and seed it
     // with default values that are useful to ignore in practice
