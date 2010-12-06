@@ -1010,6 +1010,14 @@ void CDE_begin_execve(struct tcb* tcp) {
     if (!ld_linux_filename) {
       // if the program interpreter isn't found, then it's a static
       // binary, so let the execve call proceed unmodified
+
+      // TODO: is this the right thing to do here?  I think we might
+      // need to do something better here (think harder about this case!)
+      if (CDE_exec_mode) {
+        // redirect the executable's path to within $CDE_ROOT_DIR:
+        modify_syscall_first_arg(tcp);
+      }
+
       goto done;
     }
     assert(IS_ABSPATH(ld_linux_filename));
