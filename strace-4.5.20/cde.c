@@ -973,6 +973,12 @@ void CDE_begin_execve(struct tcb* tcp) {
     }
     free(tmp);
 
+    if (!script_command) {
+      fprintf(stderr, "Fatal error: '%s' seems to be a script without a #! line.\n(cde can only execute scripts that start with a proper #! line)\n",
+              path_to_executable);
+      exit(1);
+    }
+
     // now find the program interpreter for the script_command
     // executable, be sure to grab the FIRST TOKEN since that's
     // the actual executable name ...
