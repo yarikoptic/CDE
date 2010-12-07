@@ -684,17 +684,6 @@ static char* redirect_filename_into_cderoot(char* filename, char* child_current_
   assert(filename);
   assert(child_current_pwd);
 
-  // this is a bit redundant but makes the code cleaner
-  char* test_filename_abspath =
-    canonicalize_path(filename, child_current_pwd);
-
-  // don't redirect paths that we're ignoring (remember to use ABSOLUTE PATH)
-  if (ignore_path(test_filename_abspath)) {
-    free(test_filename_abspath);
-    return NULL;
-  }
-  free(test_filename_abspath);
-
   char* filename_abspath = NULL;
   if (CDE_exec_mode) {
     // canonicalize_path has the desirable side effect of preventing
@@ -716,6 +705,14 @@ static char* redirect_filename_into_cderoot(char* filename, char* child_current_
     filename_abspath = canonicalize_path(filename, child_current_pwd);
   }
   assert(filename_abspath);
+
+
+  // don't redirect paths that we're ignoring (remember to use ABSOLUTE PATH)
+  if (ignore_path(filename_abspath)) {
+    free(filename_abspath);
+    return NULL;
+  }
+
 
   // WARNING: behavior of create_abspath_within_cderoot
   // differs based on CDE_exec_mode!

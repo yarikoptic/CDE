@@ -1,6 +1,6 @@
 import os
 
-os.chdir('/tmp/')
+os.chdir('/home/pgbovine/')
 f = open('hello.txt', 'w')
 f.write('hello')
 f.close()
