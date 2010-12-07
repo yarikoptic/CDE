@@ -2194,37 +2194,38 @@ void CDE_create_convenience_scripts(char** argv, int optind) {
   char* progname_redirected =
     redirect_filename_into_cderoot(cde_script_name, cde_starting_pwd);
 
-  // make sure directory exists :)
-  //mkdir_recursive(progname_redirected, 1);
-  make_mirror_dirs_in_cde_package(cde_starting_pwd, 0);
+  if (progname_redirected) {
+    // make sure directory exists :)
+    //mkdir_recursive(progname_redirected, 1);
+    make_mirror_dirs_in_cde_package(cde_starting_pwd, 0);
 
+    // this is sort of tricky.  we need to insert in a bunch of ../ so
+    // that we can find cde-exec, which is right in the cde-package directory
+    struct path* p = new_path_from_abspath(cde_starting_pwd);
+    char dot_dots[MAXPATHLEN];
+    assert(p->depth > 0);
+    strcpy(dot_dots, "..");
+    int i;
+    for (i = 1; i <= p->depth; i++) {
+      strcat(dot_dots, "/..");
+    }
+    delete_path(p);
 
-  // this is sort of tricky.  we need to insert in a bunch of ../ so
-  // that we can find cde-exec, which is right in the cde-package directory
-  struct path* p = new_path_from_abspath(cde_starting_pwd);
-  char dot_dots[MAXPATHLEN];
-  assert(p->depth > 0);
-  strcpy(dot_dots, "..");
-  int i;
-  for (i = 1; i <= p->depth; i++) {
-    strcat(dot_dots, "/..");
+    FILE* f = fopen(progname_redirected, "w");
+    fprintf(f, "#!/bin/sh\n");
+    fprintf(f, "%s/cde-exec", dot_dots);
+    // include original command-line options
+    for (i = 1; i < optind; i++) {
+      fprintf(f, " '%s'", argv[i]);
+    }
+    // double quotes seem to work well for making $@ more accurate
+    fprintf(f, " '%s' \"$@\"\n", target_program_fullpath);
+    fclose(f);
+
+    chmod(progname_redirected, 0777); // now make the script executable
+
+    free(progname_redirected);
   }
-  delete_path(p);
-
-  FILE* f = fopen(progname_redirected, "w");
-  fprintf(f, "#!/bin/sh\n");
-  fprintf(f, "%s/cde-exec", dot_dots);
-  // include original command-line options
-  for (i = 1; i < optind; i++) {
-    fprintf(f, " '%s'", argv[i]);
-  }
-  // double quotes seem to work well for making $@ more accurate
-  fprintf(f, " '%s' \"$@\"\n", target_program_fullpath);
-  fclose(f);
-
-  chmod(progname_redirected, 0777); // now make the script executable
-
-  free(progname_redirected);
 
   if (!strchr(target_program_fullpath, '/')) {
     char* toplevel_script_name = format("%s/%s", CDE_PACKAGE_DIR, cde_script_name);
@@ -2233,6 +2234,7 @@ void CDE_create_convenience_scripts(char** argv, int optind) {
     fprintf(f, "cd cde-root && ../cde-exec");
 
     // include original command-line options
+    int i;
     for (i = 1; i < optind; i++) {
       fprintf(f, " '%s'", argv[i]);
     }
