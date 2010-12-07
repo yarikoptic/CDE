@@ -135,7 +135,12 @@ static char* extract_sandboxed_pwd(char* real_pwd) {
   }
 
   // sanity check, make sure real_pwd is within/ cde_pseudo_root_dir
-  assert(strncmp(real_pwd, cde_pseudo_root_dir, cde_pseudo_root_dir_len) == 0);
+  if (strncmp(real_pwd, cde_pseudo_root_dir, cde_pseudo_root_dir_len) != 0) {
+    fprintf(stderr,
+            "Fatal error: '%s' is outside of cde-root/ and NOT being ignored.\n",
+            real_pwd);
+    exit(1);
+  }
 
   char* sandboxed_pwd = (real_pwd + cde_pseudo_root_dir_len);
 
@@ -2124,13 +2129,32 @@ void CDE_init_pseudo_root_dir() {
   }
 
   if (found_index < 0) {
-    fprintf(stderr, "Error: cde-exec must be run within a cde-root/ directory\n");
-    exit(1);
-  }
+    // if we can't find 'cde-root' in cde_starting_pwd, then we must
+    // be executing cde-exec from OUTSIDE of a repository, so set
+    // cde_pseudo_root_dir to:
+    //   dirname(readlink("/proc/self/exe")) + "/cde-root"
+    char proc_self_exe[MAXPATHLEN];
+    proc_self_exe[0] = '\0';
+    int len = readlink("/proc/self/exe",
+                       proc_self_exe, sizeof proc_self_exe);
+    assert(proc_self_exe[0] != '\0');
+    assert(len >= 0);
+    proc_self_exe[len] = '\0'; // wow, readlink doesn't put cap on the end!
 
-  char* tmp = path2str(p, found_index);
-  strcpy(cde_pseudo_root_dir, tmp);
-  free(tmp);
+    char* toplevel_cde_root_path =
+      format("%s/cde-root", dirname(proc_self_exe));
+
+    strcpy(cde_pseudo_root_dir, toplevel_cde_root_path);
+
+    free(toplevel_cde_root_path);
+  }
+  else {
+    // normal case --- we're currently within a cde-root/ directory, so
+    // set that as cde_pseudo_root_dir
+    char* tmp = path2str(p, found_index);
+    strcpy(cde_pseudo_root_dir, tmp);
+    free(tmp);
+  }
 
   delete_path(p);
 }
