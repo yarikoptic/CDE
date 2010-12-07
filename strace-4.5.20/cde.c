@@ -237,6 +237,8 @@ static void make_mirror_dirs_in_cde_package(char* original_abspath, int pop_one)
 }
 
 
+// does simple string comparisons.  (e.g., if you want to compare
+// with absolute paths, then filename had better be an absolute path!)
 static int ignore_path(char* filename) {
   // sometimes you will get a BOGUS empty filename ... in that case,
   // simply ignore it (this might hide some true errors, though!!!)
@@ -322,14 +324,16 @@ static void copy_file_into_cde_root(char* filename, char* child_current_pwd) {
   assert(filename);
   assert(!CDE_exec_mode);
 
-  // don't copy filename that we're ignoring
-  if (ignore_path(filename)) {
-    return;
-  }
-
   // resolve absolute path relative to child_current_pwd and
   // get rid of '..', '.', and other weird symbols
   char* filename_abspath = canonicalize_path(filename, child_current_pwd);
+
+  // don't copy filename that we're ignoring (remember to use ABSOLUTE PATH)
+  if (ignore_path(filename_abspath)) {
+    free(filename_abspath);
+    return;
+  }
+
   char* dst_path = prepend_cderoot(filename_abspath);
 
   // this will NOT follow the symlink ...
@@ -680,10 +684,16 @@ static char* redirect_filename_into_cderoot(char* filename, char* child_current_
   assert(filename);
   assert(child_current_pwd);
 
-  // don't redirect certain special paths
-  if (ignore_path(filename)) {
+  // this is a bit redundant but makes the code cleaner
+  char* test_filename_abspath =
+    canonicalize_path(filename, child_current_pwd);
+
+  // don't redirect paths that we're ignoring (remember to use ABSOLUTE PATH)
+  if (ignore_path(test_filename_abspath)) {
+    free(test_filename_abspath);
     return NULL;
   }
+  free(test_filename_abspath);
 
   char* filename_abspath = NULL;
   if (CDE_exec_mode) {
@@ -888,6 +898,9 @@ void CDE_begin_execve(struct tcb* tcp) {
     // ignoring "/bin/bash" to prevent crashes on certain Ubuntu
     // machines), then DO NOT use the ld-linux trick and simply
     // execve the file normally
+    //
+    // TODO: pass in an ABSOLUTE PATH to ignore_path for more
+    //       robust behavior
     if (ignore_path(tcp->opened_filename)) {
       return;
     }
@@ -2104,6 +2117,10 @@ void CDE_init_tcb_dir_fields(struct tcb* tcp) {
 //   /home/bob/cde-package/cde-root/home/alice/cool-experiment
 // then the pseudo_root_dir is:
 //   /home/bob/cde-package/cde-root
+//
+// if we're running cde-exec from outside of a cde-root/ directory,
+// then try to find the cde-root/ corresponding to the location of the
+// cde-exec executable
 void CDE_init_pseudo_root_dir() {
   assert(CDE_exec_mode);
 
