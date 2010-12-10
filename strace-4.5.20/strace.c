@@ -839,6 +839,10 @@ main(int argc, char *argv[])
       fputs("ignore_prefix=/tmp/\n", f);
       fputs("ignore_exact=/tmp\n", f);
 
+      fputs("\n# Flush ld-linux cache (allows some 3-D graphics apps to work)\n", f);
+      fputs("ignore_exact=/etc/ld.so.cache\n", f);
+      // TODO: should I also add /etc/ld.so.preload and /etc/ld.so.nohwcap here?
+
       fputs("\n# Ignore .Xauthority to allow X Windows programs to work\n", f);
       // take into account accesses by both relative and absolute paths:
       fputs("ignore_exact=.Xauthority\n", f);
@@ -878,6 +882,7 @@ main(int argc, char *argv[])
       fputs("ignore_environment_var=ORBIT_SOCKETDIR\n", f);
       fputs("ignore_environment_var=SESSION_MANAGER\n", f);
       fputs("ignore_environment_var=XAUTHORITY\n", f);
+      fputs("ignore_environment_var=DISPLAY\n", f);
      
       fclose(f);
     }
