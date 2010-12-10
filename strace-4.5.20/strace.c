@@ -841,7 +841,9 @@ main(int argc, char *argv[])
 
       fputs("\n# Flush ld-linux cache (allows some 3-D graphics apps to work)\n", f);
       fputs("ignore_exact=/etc/ld.so.cache\n", f);
-      // TODO: should I also add /etc/ld.so.preload and /etc/ld.so.nohwcap here?
+      fputs("# un-comment the entries below if you think they might help your app:\n", f);
+      fputs("#ignore_exact=/etc/ld.so.preload\n", f);
+      fputs("#ignore_exact=/etc/ld.so.nohwcap\n", f);
 
       fputs("\n# Ignore .Xauthority to allow X Windows programs to work\n", f);
       // take into account accesses by both relative and absolute paths:
@@ -856,12 +858,12 @@ main(int argc, char *argv[])
       fputs("\n# Ignore so that networking can work properly\n", f);
       fputs("ignore_exact=/etc/resolv.conf\n", f);
 
-      // these other files might or might not be useful to ignore along
-      // with /etc/resolv.conf ... ignore these later if necessary
-      //fputs("ignore_exact=/etc/host.conf\n", f);
-      //fputs("ignore_exact=/etc/hosts\n", f);
-      //fputs("ignore_exact=/etc/nsswitch.conf\n", f);
-      //fputs("ignore_exact=/etc/gai.conf\n", f);
+      fputs("# These files might be useful to ignore along with /etc/resolv.conf\n", f);
+      fputs("# (un-comment if you want to try them)\n", f);
+      fputs("#ignore_exact=/etc/host.conf\n", f);
+      fputs("#ignore_exact=/etc/hosts\n", f);
+      fputs("#ignore_exact=/etc/nsswitch.conf\n", f);
+      fputs("#ignore_exact=/etc/gai.conf\n", f);
 
       // ewencp also suggests looking into ignoring these other
       // networking-related files:
