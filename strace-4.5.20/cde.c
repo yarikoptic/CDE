@@ -57,6 +57,7 @@ __asm__(".symver shmctl,shmctl@GLIBC_2.0"); // hack to eliminate glibc 2.2 depen
 // 1 if we are executing code in a CDE package,
 // 0 for tracing regular execution
 char CDE_exec_mode;
+char CDE_verbose_mode = 0; // -v option
 
 static void begin_setup_shmat(struct tcb* tcp);
 static void* find_free_addr(int pid, int exec, unsigned long size);
@@ -723,7 +724,10 @@ static char* redirect_filename_into_cderoot(char* filename, char* child_current_
   char* ret = create_abspath_within_cderoot(filename_abspath);
   free(filename_abspath);
 
-  //printf("redirect_filename_into_cderoot %s => %s\n", filename, ret);
+  if (CDE_verbose_mode) {
+    printf("redirect '%s' => '%s'\n", filename, ret);
+  }
+
   return ret;
 }
 
@@ -761,8 +765,11 @@ void CDE_begin_standard_fileop(struct tcb* tcp, const char* syscall_name) {
   assert(!tcp->opened_filename);
   tcp->opened_filename = strcpy_from_child(tcp, tcp->u_arg[0]);
 
+  if (CDE_verbose_mode) {
+    printf("BEGIN %s '%s'\n", syscall_name, tcp->opened_filename);
+  }
+
   if (CDE_exec_mode) {
-    //printf("begin %s %s\n", syscall_name, tcp->opened_filename);
     modify_syscall_first_arg(tcp);
   }
 }
@@ -776,7 +783,12 @@ void CDE_begin_standard_fileop(struct tcb* tcp, const char* syscall_name) {
 void CDE_end_standard_fileop(struct tcb* tcp, const char* syscall_name,
                              char success_type) {
   assert(tcp->opened_filename);
+
+  if (CDE_verbose_mode) {
+    printf("END   %s '%s' (%u)\n", syscall_name, tcp->opened_filename, tcp->u_rval);
+  }
  
+
   if (CDE_exec_mode) {
     // empty
   }
@@ -891,7 +903,9 @@ void CDE_begin_execve(struct tcb* tcp) {
   // anything and simply let the execve fail just like it's supposed to
   struct stat filename_stat;
 
-  //printf("CDE_begin_execve '%s'\n", tcp->opened_filename);
+  if (CDE_verbose_mode) {
+    printf("CDE_begin_execve '%s'\n", tcp->opened_filename);
+  }
 
   char* redirected_path = NULL;
   if (CDE_exec_mode) {
@@ -2523,7 +2537,9 @@ void CDE_load_environment_vars() {
       }
     }
     else {
-      //printf("ignored '%s' => '%s'\n", name, val);
+      if (CDE_verbose_mode) {
+        printf("ignored envvar '%s' => '%s'\n", name, val);
+      }
     }
 
     if (name) free(name);
