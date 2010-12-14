@@ -2500,8 +2500,8 @@ void CDE_load_environment_vars() {
 }
 
 
-// if we're running in CDE_exec_mode, redirect path component for bind
-// and connect INTO cde-root/
+// if we're running in CDE_exec_mode, redirect path argument for bind()
+// and connect() into cde-root sandbox
 void CDE_begin_socket_bind_or_connect(struct tcb *tcp) {
   // only do this redirection in CDE_exec_mode
   if (!CDE_exec_mode) {
@@ -2547,15 +2547,22 @@ void CDE_begin_socket_bind_or_connect(struct tcb *tcp) {
 
         // could be null if path is being ignored by cde.options
         if (redirected_path) {
-          //printf("RRRredirected_path: '%s'\n", redirected_path);
+          //printf("redirected_path: '%s'\n", redirected_path);
 
           unsigned long new_pathlen = strlen(redirected_path);
 
           // alter the socket address field to point to redirected path
-          memcpy_to_child(tcp->pid, addr + sizeof(addrbuf.sau.sun_family),
+          memcpy_to_child(tcp->pid, (char*)(addr + sizeof(addrbuf.sau.sun_family)),
                           redirected_path, new_pathlen + 1);
 
           free(redirected_path);
+
+
+          // remember the 2 extra bytes for the sun_family field!
+          unsigned long new_totallen = new_pathlen + sizeof(addrbuf.sau.sun_family);
+
+          struct user_regs_struct cur_regs;
+          EXITIF(ptrace(PTRACE_GETREGS, tcp->pid, NULL, (long)&cur_regs) < 0);
 
 #if defined (I386)
           // on i386, things are tricky tricky!
@@ -2574,27 +2581,16 @@ void CDE_begin_socket_bind_or_connect(struct tcb *tcp) {
           // which is VERY IMPORTANT or else the path that the
           // kernel sees will be truncated!!!
 
-          // remember the 2 extra bytes for the sun_family field!
-          unsigned long new_totallen = new_pathlen + sizeof(addrbuf.sau.sun_family);
-
-          struct user_regs_struct cur_regs;
-          EXITIF(ptrace(PTRACE_GETREGS, tcp->pid, NULL, (long)&cur_regs) < 0);
-
           // we want to override arg[2], which is located at:
           //   cur_regs.ecx + 2*sizeof(unsigned long)
           memcpy_to_child(tcp->pid, cur_regs.ecx + 2*sizeof(unsigned long),
                           &new_totallen, sizeof(unsigned long));
-
-          /*
-          unsigned long tmp;
-          if (umoven(tcp, cur_regs.ecx + 2*sizeof(tmp), sizeof(tmp), &tmp) < 0) {
-            return;
-          }
-          printf("tmp: %u\n", tmp);
-          */
-
 #elif defined(X86_64)
-          assert(0); // TODO
+          // on x86-64, things are much simpler.  the length field is
+          // stored in %rdx (the third argument), so simply override
+          // that register with new_totallen
+          cur_regs.rdx = (long)new_totallen;
+          ptrace(PTRACE_SETREGS, tcp->pid, NULL, (long)&cur_regs);
 #else
           #error "Unknown architecture (not I386 or X86_64)"
 #endif
