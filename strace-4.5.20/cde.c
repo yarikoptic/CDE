@@ -59,6 +59,8 @@ __asm__(".symver shmctl,shmctl@GLIBC_2.0"); // hack to eliminate glibc 2.2 depen
 char CDE_exec_mode;
 char CDE_verbose_mode = 0; // -v option
 
+static char cde_options_initialized = 0; // set to 1 after CDE_init_options() done
+
 static void begin_setup_shmat(struct tcb* tcp);
 static void* find_free_addr(int pid, int exec, unsigned long size);
 static void find_and_copy_possible_dynload_libs(char* filename, char* child_current_pwd);
@@ -127,20 +129,25 @@ static char* extract_sandboxed_pwd(char* real_pwd) {
   // as cwd
   int cde_pseudo_root_dir_len = strlen(cde_pseudo_root_dir);
 
+  char real_pwd_is_within_cde_pseudo_root_dir =
+    ((strlen(real_pwd) >= cde_pseudo_root_dir_len) &&
+     (strncmp(real_pwd, cde_pseudo_root_dir, cde_pseudo_root_dir_len) == 0));
+
   // if real_pwd is within a strange directory like '/tmp' that should
-  // be ignored, AND if it resides outside of cde_pseudo_root_dir, then
+  // be ignored, AND if it resides OUTSIDE of cde_pseudo_root_dir, then
   // simply return itself
   //
   // e.g., if real_pwd is '/tmp', then return itself,
-  // but if real_pwd is '/tmp/cde-package/cde-root/home/pgbovine', then
-  // treat it like any normal path
-  if (ignore_path(real_pwd) &&
-      (strlen(real_pwd) < cde_pseudo_root_dir_len)) {
+  // but if real_pwd is '/tmp/cde-package/cde-root/home/pgbovine' and
+  // cde_pseudo_root_dir is '/tmp/cde-package/cde-root/', then
+  // treat it like any normal path (extract '/home/pgbovine')
+  if (ignore_path(real_pwd) && !real_pwd_is_within_cde_pseudo_root_dir) {
     return real_pwd;
   }
 
-  // sanity check, make sure real_pwd is within/ cde_pseudo_root_dir
-  if (strncmp(real_pwd, cde_pseudo_root_dir, cde_pseudo_root_dir_len) != 0) {
+  // sanity check, make sure real_pwd is within/ cde_pseudo_root_dir,
+  // if we're not ignoring it
+  if (!real_pwd_is_within_cde_pseudo_root_dir) {
     fprintf(stderr,
             "Fatal error: '%s' is outside of cde-root/ and NOT being ignored.\n",
             real_pwd);
@@ -245,6 +252,8 @@ static void make_mirror_dirs_in_cde_package(char* original_abspath, int pop_one)
 // does simple string comparisons.  (e.g., if you want to compare
 // with absolute paths, then filename had better be an absolute path!)
 static int ignore_path(char* filename) {
+  assert(cde_options_initialized);
+
   // sometimes you will get a BOGUS empty filename ... in that case,
   // simply ignore it (this might hide some true errors, though!!!)
   if (filename[0] == '\0') {
@@ -2455,6 +2464,8 @@ void CDE_init_options() {
   }
 
   fclose(f);
+
+  cde_options_initialized = 1;
 }
 
 
