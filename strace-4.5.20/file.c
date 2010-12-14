@@ -33,7 +33,6 @@
 #include "defs.h"
 
 // pgbovine
-// pgbovine
 extern void CDE_begin_standard_fileop(struct tcb* tcp, const char* syscall_name);
 extern void CDE_end_standard_fileop(struct tcb* tcp, const char* syscall_name,
                                     char success_type);

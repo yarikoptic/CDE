@@ -42,6 +42,10 @@ CDE is currently licensed under GPL v3:
 #include "paths.h"
 #include <dirent.h>
 
+// for CDE_begin_socket_bind_or_connect
+#include <sys/socket.h>
+#include <sys/un.h>
+
 
 // TODO: eliminate this hack if it results in a compile-time error
 #include "config.h" // to get I386 / X86_64 definitions
@@ -2493,5 +2497,112 @@ void CDE_load_environment_vars() {
 
   munmap(environ_start, env_file_stat.st_size);
   close(full_environment_fd);
+}
+
+
+// if we're running in CDE_exec_mode, redirect path component for bind
+// and connect INTO cde-root/
+void CDE_begin_socket_bind_or_connect(struct tcb *tcp) {
+  // only do this redirection in CDE_exec_mode
+  if (!CDE_exec_mode) {
+    return;
+  }
+
+  // code adapted from printsock in strace-4.5.20/net.c
+  long addr = tcp->u_arg[1];
+  int addrlen = tcp->u_arg[2];
+ 
+  union {
+    char pad[128];
+    struct sockaddr sa;
+    struct sockaddr_un sau;
+  } addrbuf;
+
+  if (addr == 0) {
+    return;
+  }
+
+  if (addrlen < 2 || addrlen > sizeof(addrbuf)) {
+    addrlen = sizeof(addrbuf);
+  }
+
+  memset(&addrbuf, 0, sizeof(addrbuf));
+  if (umoven(tcp, addr, addrlen, addrbuf.pad) < 0) {
+    return;
+  }
+  addrbuf.pad[sizeof(addrbuf.pad) - 1] = '\0';
+
+  /* AF_FILE is also a synonym for AF_UNIX */
+  if (addrbuf.sa.sa_family == AF_UNIX) {
+    if (addrlen > 2 && addrbuf.sau.sun_path[0]) {
+      //tprintf("path=");
+
+      // addr + sizeof(addrbuf.sau.sun_family) is the location of the real path
+      char* original_path = strcpy_from_child(tcp, addr + sizeof(addrbuf.sau.sun_family));
+      if (original_path) {
+        //printf("original_path='%s'\n", original_path);
+
+        char* redirected_path =
+          redirect_filename_into_cderoot(original_path, tcp->current_dir);
+
+        // could be null if path is being ignored by cde.options
+        if (redirected_path) {
+          //printf("RRRredirected_path: '%s'\n", redirected_path);
+
+          unsigned long new_pathlen = strlen(redirected_path);
+
+          // alter the socket address field to point to redirected path
+          memcpy_to_child(tcp->pid, addr + sizeof(addrbuf.sau.sun_family),
+                          redirected_path, new_pathlen + 1);
+
+          free(redirected_path);
+
+#if defined (I386)
+          // on i386, things are tricky tricky!
+          // the kernel uses socketcall() as a common entry
+          // point for all socket-related system calls
+          // http://www.kernel.org/doc/man-pages/online/pages/man2/socketcall.2.html
+          //
+          // the ecx register contains a pointer to an array of 3 pointers
+          // (of size 'unsigned long'), which represents the 3 arguments
+          // to the bind/connect syscall.  they are:
+          //   arg[0] - socket number
+          //   arg[1] - pointer to socket address structure
+          //   arg[2] - length of socket address structure
+
+          // we need to alter the length field to new_totallen,
+          // which is VERY IMPORTANT or else the path that the
+          // kernel sees will be truncated!!!
+
+          // remember the 2 extra bytes for the sun_family field!
+          unsigned long new_totallen = new_pathlen + sizeof(addrbuf.sau.sun_family);
+
+          struct user_regs_struct cur_regs;
+          EXITIF(ptrace(PTRACE_GETREGS, tcp->pid, NULL, (long)&cur_regs) < 0);
+
+          // we want to override arg[2], which is located at:
+          //   cur_regs.ecx + 2*sizeof(unsigned long)
+          memcpy_to_child(tcp->pid, cur_regs.ecx + 2*sizeof(unsigned long),
+                          &new_totallen, sizeof(unsigned long));
+
+          /*
+          unsigned long tmp;
+          if (umoven(tcp, cur_regs.ecx + 2*sizeof(tmp), sizeof(tmp), &tmp) < 0) {
+            return;
+          }
+          printf("tmp: %u\n", tmp);
+          */
+
+#elif defined(X86_64)
+          assert(0); // TODO
+#else
+          #error "Unknown architecture (not I386 or X86_64)"
+#endif
+        }
+
+        free(original_path);
+      }
+    }
+  }
 }
 
