@@ -93,6 +93,7 @@ extern char *optarg;
 
 // pgbovine
 extern char CDE_exec_mode;
+extern char CDE_verbose_mode; // -v option
 extern void alloc_tcb_CDE_fields(struct tcb* tcp);
 extern void free_tcb_CDE_fields(struct tcb* tcp);
 extern void copy_file(char* src_filename, char* dst_filename);
@@ -996,7 +997,9 @@ main(int argc, char *argv[])
 			xflag++;
 			break;
 		case 'v':
-			qualify("abbrev=none");
+      // pgbovine - hijack for the '-v' option
+			//qualify("abbrev=none");
+      CDE_verbose_mode = 1;
 			break;
 		case 'V':
 			printf("%s -- version %s\n", PACKAGE_NAME, VERSION);
