@@ -2432,7 +2432,10 @@ decode_mknod(struct tcb *tcp, int offset)
 int
 sys_mknod(struct tcb *tcp)
 {
-	return decode_mknod(tcp, 0);
+  CDE_standard_fileop_macro(tcp, 0); // pgbovine
+  return 0;
+
+	//return decode_mknod(tcp, 0);
 }
 
 #ifdef LINUX
