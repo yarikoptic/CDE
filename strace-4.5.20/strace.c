@@ -839,12 +839,20 @@ main(int argc, char *argv[])
       fputs("ignore_prefix=/tmp/\n", f);
       fputs("ignore_exact=/tmp\n", f);
 
+      fputs("\n# Flush ld-linux cache (allows some 3-D graphics apps to work)\n", f);
+      fputs("ignore_exact=/etc/ld.so.cache\n", f);
+      fputs("# un-comment the entries below if you think they might help your app:\n", f);
+      fputs("#ignore_exact=/etc/ld.so.preload\n", f);
+      fputs("#ignore_exact=/etc/ld.so.nohwcap\n", f);
+
       fputs("\n# Ignore .Xauthority to allow X Windows programs to work\n", f);
       // take into account accesses by both relative and absolute paths:
       fputs("ignore_exact=.Xauthority\n", f);
       fputs("ignore_exact=", f);
       fputs(getenv("HOME"), f); // we're assuming $HOME does NOT end in a '/'
       fputs("/.Xauthority\n", f);
+      fputs("# TODO: the line below should eventually replace the ones above\n", f);
+      fputs("#ignore_substr=.Xauthority\n", f);
 
       // we gotta ignore /etc/resolv.conf or else Google Earth can't
       // access the network when on another machine, so it won't work
@@ -852,12 +860,12 @@ main(int argc, char *argv[])
       fputs("\n# Ignore so that networking can work properly\n", f);
       fputs("ignore_exact=/etc/resolv.conf\n", f);
 
-      // these other files might or might not be useful to ignore along
-      // with /etc/resolv.conf ... ignore these later if necessary
-      //fputs("ignore_exact=/etc/host.conf\n", f);
-      //fputs("ignore_exact=/etc/hosts\n", f);
-      //fputs("ignore_exact=/etc/nsswitch.conf\n", f);
-      //fputs("ignore_exact=/etc/gai.conf\n", f);
+      fputs("# These files might be useful to ignore along with /etc/resolv.conf\n", f);
+      fputs("# (un-comment if you want to try them)\n", f);
+      fputs("#ignore_exact=/etc/host.conf\n", f);
+      fputs("#ignore_exact=/etc/hosts\n", f);
+      fputs("#ignore_exact=/etc/nsswitch.conf\n", f);
+      fputs("#ignore_exact=/etc/gai.conf\n", f);
 
       // ewencp also suggests looking into ignoring these other
       // networking-related files:
@@ -878,6 +886,7 @@ main(int argc, char *argv[])
       fputs("ignore_environment_var=ORBIT_SOCKETDIR\n", f);
       fputs("ignore_environment_var=SESSION_MANAGER\n", f);
       fputs("ignore_environment_var=XAUTHORITY\n", f);
+      fputs("ignore_environment_var=DISPLAY\n", f);
      
       fclose(f);
     }
@@ -913,7 +922,7 @@ main(int argc, char *argv[])
 
   // pgbovine - only track selected system calls
   // qualify actually mutates this string, so we can't pass in a constant
-  char* tmp = strdup("trace=open,execve,stat,stat64,lstat,lstat64,oldstat,oldlstat,link,symlink,unlink,rename,access,creat,chmod,chown,chown32,lchown,lchown32,readlink,utime,truncate,truncate64,chdir,fchdir,mkdir,rmdir,getcwd");
+  char* tmp = strdup("trace=open,execve,stat,stat64,lstat,lstat64,oldstat,oldlstat,link,symlink,unlink,rename,access,creat,chmod,chown,chown32,lchown,lchown32,readlink,utime,truncate,truncate64,chdir,fchdir,mkdir,rmdir,getcwd,mknod,bind,connect");
 	qualify(tmp);
   free(tmp);
 

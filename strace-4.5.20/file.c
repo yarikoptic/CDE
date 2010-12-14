@@ -33,7 +33,6 @@
 #include "defs.h"
 
 // pgbovine
-// pgbovine
 extern void CDE_begin_standard_fileop(struct tcb* tcp, const char* syscall_name);
 extern void CDE_end_standard_fileop(struct tcb* tcp, const char* syscall_name,
                                     char success_type);
@@ -2432,7 +2431,10 @@ decode_mknod(struct tcb *tcp, int offset)
 int
 sys_mknod(struct tcb *tcp)
 {
-	return decode_mknod(tcp, 0);
+  CDE_standard_fileop_macro(tcp, 0); // pgbovine
+  return 0;
+
+	//return decode_mknod(tcp, 0);
 }
 
 #ifdef LINUX
