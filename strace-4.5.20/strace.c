@@ -851,6 +851,8 @@ main(int argc, char *argv[])
       fputs("ignore_exact=", f);
       fputs(getenv("HOME"), f); // we're assuming $HOME does NOT end in a '/'
       fputs("/.Xauthority\n", f);
+      fputs("# TODO: the line below should eventually replace the ones above\n", f);
+      fputs("#ignore_substr=.Xauthority\n", f);
 
       // we gotta ignore /etc/resolv.conf or else Google Earth can't
       // access the network when on another machine, so it won't work
