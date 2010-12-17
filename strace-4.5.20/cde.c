@@ -968,7 +968,7 @@ void CDE_begin_execve(struct tcb* tcp) {
     // machines), then DO NOT use the ld-linux trick and simply
     // execve the file normally
     char* opened_filename_abspath =
-      canonicalize_path(tcp->opened_filename, tcp->current_dir);
+      canonicalize_path(tcp->opened_filename, extract_sandboxed_pwd(tcp->current_dir));
 
     if (ignore_path(opened_filename_abspath)) {
       free(opened_filename_abspath);
@@ -2390,7 +2390,8 @@ void CDE_init_options() {
   redirect_prefix_paths_ind = 0;
   redirect_substr_paths_ind = 0;
   ignore_envvars_ind = 0;
-
+ 
+  default_path_policy = ALWAYS_REDIRECT; // just to be paranoid
 
   FILE* f = NULL;
 

@@ -8,6 +8,7 @@ from cde_test_common import *
 # customize this test due to special circumstances
 
 os.system('rm -rf cde-package')
+os.system('rm -f cde.options')
 time.sleep(0.3) # to give os.system some time to work :)
 
 Popen(["make", "clean"], stdout=PIPE, stderr=PIPE).communicate()
