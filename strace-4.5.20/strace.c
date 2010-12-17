@@ -882,6 +882,14 @@ main(int argc, char *argv[])
       fputs("ignore_environment_var=SESSION_MANAGER\n", f);
       fputs("ignore_environment_var=XAUTHORITY\n", f);
       fputs("ignore_environment_var=DISPLAY\n", f);
+
+
+      fputs("\n# What happens to paths not mentioned in this file?\n", f);
+      fputs("# (choose only ONE to uncomment if desired)\n", f);
+      fputs("#default_path_policy=always_redirect\n", f);
+      fputs("#default_path_policy=always_ignore\n", f);
+      fputs("#default_path_policy=unionfs_redirect\n", f);
+      fputs("#default_path_policy=unionfs_ignore\n", f);
      
       fclose(f);
     }

@@ -30,7 +30,7 @@
  */
 
 // pgbovine - version number token for cde.options file
-#define CDE_OPTIONS_VERSION_NUM "# cde.options v1"
+#define CDE_OPTIONS_VERSION_NUM "# cde.options v2"
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"

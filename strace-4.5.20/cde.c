@@ -96,6 +96,21 @@ int redirect_substr_paths_ind = 0;
 static char* ignore_envvars[100]; // each element should be an environment variable to ignore
 int ignore_envvars_ind = 0;
 
+// what should we do with paths that aren't specified in cde.options?
+typedef enum _path_policy {
+  // always redirect path into cde-root/
+  ALWAYS_REDIRECT,
+  // never redirect path; always use the version on native filesystem
+  ALWAYS_IGNORE,
+  // if file exists in cde-root/, use it; otherwise use native version
+  UNIONFS_REDIRECT,
+  // if file exists natively, use it; otherwise redirect path into cde-root/
+  UNIONFS_IGNORE
+} path_policy;
+
+// if nothing specified in cde.options, then use this default:
+path_policy default_path_policy = ALWAYS_REDIRECT;
+
 
 // the absolute path to the cde-root/ directory, since that will be
 // where our fake filesystem starts. e.g., if cde_starting_pwd is
@@ -109,6 +124,8 @@ char cde_pseudo_root_dir[MAXPATHLEN];
 
 // to shut up gcc warnings without going thru #include hell
 extern ssize_t getline(char **lineptr, size_t *n, FILE *stream);
+extern int isascii(int);
+extern int isprint(int);
 
 extern char* find_ELF_program_interpreter(char * file_name); // from ../readelf-mini/libreadelf-mini.a
 
@@ -249,8 +266,7 @@ static void make_mirror_dirs_in_cde_package(char* original_abspath, int pop_one)
 }
 
 
-// does simple string comparisons.  (e.g., if you want to compare
-// with absolute paths, then filename had better be an absolute path!)
+// does simple string comparisons on ABSOLUTE PATHS.
 static int ignore_path(char* filename) {
   assert(cde_options_initialized);
 
@@ -259,6 +275,8 @@ static int ignore_path(char* filename) {
   if (filename[0] == '\0') {
     return 1;
   }
+
+  assert(IS_ABSPATH(filename));
 
   int i;
 
@@ -299,10 +317,37 @@ static int ignore_path(char* filename) {
   }
 
 
-  // do NOT ignore by default.  if you want to ignore everything except
-  // for what's explicitly specified by 'redirect' directives, then
-  // use an option like "ignore_prefix=/" (to ignore everything) and
-  // then add redirect_prefix= and redirect_exact= directives accordingly
+  if (default_path_policy == ALWAYS_REDIRECT) {
+    return 0;
+  }
+  else if (default_path_policy == ALWAYS_IGNORE) {
+    return 1;
+  }
+  else if (default_path_policy == UNIONFS_REDIRECT) {
+    struct stat tmp_statbuf;
+    char* redirected_filename = create_abspath_within_cderoot(filename);
+    if (stat(redirected_filename, &tmp_statbuf) == 0) {
+      free(redirected_filename);
+      return 0;
+    }
+    else {
+      free(redirected_filename);
+      return 1;
+    }
+  }
+  else if (default_path_policy == UNIONFS_IGNORE) {
+    struct stat tmp_statbuf;
+    if (stat(filename, &tmp_statbuf) == 0) {
+      return 1;
+    }
+    else {
+      return 0;
+    }
+  }
+
+  // should never get here
+  fprintf(stderr, "Fatal error in ignore_path\n");
+  exit(1);
   return 0;
 }
 
@@ -794,7 +839,7 @@ void CDE_end_standard_fileop(struct tcb* tcp, const char* syscall_name,
   assert(tcp->opened_filename);
 
   if (CDE_verbose_mode) {
-    printf("END   %s '%s' (%u)\n", syscall_name, tcp->opened_filename, tcp->u_rval);
+    printf("END   %s '%s' (%ld)\n", syscall_name, tcp->opened_filename, tcp->u_rval);
   }
  
 
@@ -922,12 +967,14 @@ void CDE_begin_execve(struct tcb* tcp) {
     // ignoring "/bin/bash" to prevent crashes on certain Ubuntu
     // machines), then DO NOT use the ld-linux trick and simply
     // execve the file normally
-    //
-    // TODO: pass in an ABSOLUTE PATH to ignore_path for more
-    //       robust behavior
-    if (ignore_path(tcp->opened_filename)) {
+    char* opened_filename_abspath =
+      canonicalize_path(tcp->opened_filename, tcp->current_dir);
+
+    if (ignore_path(opened_filename_abspath)) {
+      free(opened_filename_abspath);
       return;
     }
+    free(opened_filename_abspath);
 
     redirected_path = redirect_filename_into_cderoot(tcp->opened_filename, tcp->current_dir);
   }
@@ -2424,6 +2471,9 @@ void CDE_init_options() {
         else if (strcmp(p, "redirect_substr") == 0) {
           set_id = 7;
         }
+        else if (strcmp(p, "default_path_policy") == 0) {
+          set_id = 8;
+        }
         else {
           fprintf(stderr, "Fatal error in cde.options: unrecognized token '%s'\n", p);
           exit(1);
@@ -2453,6 +2503,24 @@ void CDE_init_options() {
             break;
           case 7:
             CDE_add_redirect_substr_path(p);
+            break;
+          case 8:
+            if (strcmp(p, "always_redirect") == 0) {
+              default_path_policy = ALWAYS_REDIRECT;
+            }
+            else if (strcmp(p, "always_ignore") == 0) {
+              default_path_policy = ALWAYS_IGNORE;
+            }
+            else if (strcmp(p, "unionfs_redirect") == 0) {
+              default_path_policy = UNIONFS_REDIRECT;
+            }
+            else if (strcmp(p, "unionfs_ignore") == 0) {
+              default_path_policy = UNIONFS_IGNORE;
+            }
+            else {
+              fprintf(stderr, "Fatal error in cde.options: unrecognized value '%s'\n", p);
+            }
+
             break;
           default:
             assert(0);
@@ -2650,8 +2718,8 @@ void CDE_begin_socket_bind_or_connect(struct tcb *tcp) {
 
           // we want to override arg[2], which is located at:
           //   cur_regs.ecx + 2*sizeof(unsigned long)
-          memcpy_to_child(tcp->pid, cur_regs.ecx + 2*sizeof(unsigned long),
-                          &new_totallen, sizeof(unsigned long));
+          memcpy_to_child(tcp->pid, (char*)(cur_regs.ecx + 2*sizeof(unsigned long)),
+                          (char*)(&new_totallen), sizeof(unsigned long));
 #elif defined(X86_64)
           // on x86-64, things are much simpler.  the length field is
           // stored in %rdx (the third argument), so simply override
