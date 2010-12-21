@@ -7,8 +7,10 @@ from subprocess import *
 my_root = sys.argv[1]
 assert os.path.isdir(my_root)
 
-DEBUG = False
+DEBUG = True
 
+# these files take forever to search thru and don't result in much savings ...
+ignores = ['__init__.py', '__init__.pyc']
 
 # Key:   base filename
 # Value: list of directories where file is found
@@ -31,6 +33,9 @@ coalescing_candidates = defaultdict(list)
 
 for (dirname, subdirs, files) in os.walk(my_root):
   for f in files:
+    if f in ignores:
+      continue
+
     # first look for exact matches
     if f in system_filenames:
       f_path = os.path.join(dirname, f)
@@ -119,6 +124,7 @@ for (x, y_lst) in coalescing_candidates.iteritems():
         if DEBUG: print "  better:", y
 
   if DEBUG: print "Best match:", best_match
+  if DEBUG: print "  bytes saved:", best_match_savings
   if DEBUG: print "---"
   total_savings += best_match_savings
 
