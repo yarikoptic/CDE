@@ -1,20 +1,19 @@
 # dependencies: bsdiff, md5sum
 
 import os, sys, stat
-from collections import defaultdict
 from subprocess import *
 
 my_root = sys.argv[1]
 assert os.path.isdir(my_root)
 
-DEBUG = True
+DEBUG = False
 
 # these files take forever to search thru and don't result in much savings ...
 ignores = ['__init__.py', '__init__.pyc']
 
 # Key:   base filename
 # Value: list of directories where file is found
-system_filenames = defaultdict(list)
+system_filenames = {}
 
 basedirs = ['/bin', '/lib', '/lib64', '/usr/bin', '/usr/lib', '/usr/lib64']
 
@@ -22,6 +21,8 @@ for b in basedirs:
   if os.path.isdir(b):
     for (dirname, subdirs, files) in os.walk(b):
       for f in files:
+        if f not in system_filenames:
+          system_filenames[f] = []
         system_filenames[f].append(dirname)
 
 
@@ -29,7 +30,7 @@ for b in basedirs:
 # (full path to file in cde-root/, full path to file in native system # dir)
 # Key:   full path to file within cde-root/
 # Value: list of candidate system files (full paths)
-coalescing_candidates = defaultdict(list)
+coalescing_candidates = {}
 
 for (dirname, subdirs, files) in os.walk(my_root):
   for f in files:
@@ -45,6 +46,8 @@ for (dirname, subdirs, files) in os.walk(my_root):
           k_path = os.path.join(k_dir, f)
           k_st = os.lstat(k_path) # don't follow symlinks
           if stat.S_ISREG(k_st.st_mode):
+            if f_path not in coalescing_candidates:
+              coalescing_candidates[f_path] = []
             coalescing_candidates[f_path].append(k_path)
 
     # then look for fuzzy searches for libraries
@@ -73,10 +76,13 @@ for (dirname, subdirs, files) in os.walk(my_root):
               k_path = os.path.join(k_dir, k)
               k_st = os.lstat(k_path) # don't follow symlinks
               if stat.S_ISREG(k_st.st_mode):
+                if f_path not in coalescing_candidates:
+                  coalescing_candidates[f_path] = []
                 coalescing_candidates[f_path].append(k_path)
 
 
-print len(coalescing_candidates), 'candidates for coalescing'
+if DEBUG:
+  print len(coalescing_candidates), 'candidates for coalescing'
 
 
 total_savings = 0
@@ -96,7 +102,14 @@ for (x, y_lst) in coalescing_candidates.iteritems():
 
     lines = stdout.split('\n')
     y_md5 = lines[0].split()[0]
-    x_md5 = lines[1].split()[0]
+
+    # sometimes you don't have permissions to read this file, so just
+    # move on ...
+    try:
+      x_md5 = lines[1].split()[0]
+    except:
+      continue
+
     if (x_md5 == y_md5):
       if DEBUG: print 'EXACT MATCH!', y
       best_match = y
@@ -111,7 +124,11 @@ for (x, y_lst) in coalescing_candidates.iteritems():
     (stdout, stderr) = Popen(['./bsdiff', y, x, '/tmp/cur.patch'], stdout=PIPE, stderr=PIPE).communicate()
 
     pkg_st = os.stat(x)
-    patch_st = os.stat('/tmp/cur.patch')
+    try:
+      patch_st = os.stat('/tmp/cur.patch')
+    except:
+      print >> sys.stderr, "Error in bsdiff:", y, x
+      continue # sometimes bsdiff fails
 
     savings = pkg_st.st_size - patch_st.st_size
     if savings < 0:
@@ -129,5 +146,8 @@ for (x, y_lst) in coalescing_candidates.iteritems():
   total_savings += best_match_savings
 
 
-print "Total saved bytes:", total_savings
+if DEBUG:
+  print "Total saved bytes:", total_savings
+else:
+  print total_savings
 
