@@ -840,9 +840,8 @@ main(int argc, char *argv[])
       fputs("ignore_prefix=/tmp/\n", f);
       fputs("ignore_exact=/tmp\n", f);
 
-      fputs("\n# Flush ld-linux cache (allows some 3-D graphics apps to work)\n", f);
-      fputs("ignore_exact=/etc/ld.so.cache\n", f);
-      fputs("# un-comment the entries below if you think they might help your app:\n", f);
+      fputs("\n# un-comment the entries below if you think they might help your app:\n", f);
+      fputs("#ignore_exact=/etc/ld.so.cache\n", f);
       fputs("#ignore_exact=/etc/ld.so.preload\n", f);
       fputs("#ignore_exact=/etc/ld.so.nohwcap\n", f);
 
