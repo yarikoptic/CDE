@@ -546,11 +546,14 @@ done:
 }
 
 
-// modify the first argument to the given system call to a path within
-// cde-root/, if applicable
+// modify a single argument to the given system call
+// to a path within cde-root/, if applicable
 //
 // assumes tcp->opened_filename has already been set
-static void modify_syscall_first_arg(struct tcb* tcp) {
+//
+// arg_num == 1 mean modify first register arg
+// arg_num == 2 mean modify second register arg
+static void modify_syscall_single_arg(struct tcb* tcp, int arg_num) {
   assert(CDE_exec_mode);
   assert(tcp->opened_filename);
 
@@ -586,18 +589,31 @@ static void modify_syscall_first_arg(struct tcb* tcp) {
   struct user_regs_struct cur_regs;
   EXITIF(ptrace(PTRACE_GETREGS, tcp->pid, NULL, (long)&cur_regs) < 0);
 
+  if (arg_num == 1) {
 #if defined (I386)
-  cur_regs.ebx = (long)tcp->childshm;
+    cur_regs.ebx = (long)tcp->childshm;
 #elif defined(X86_64)
-  cur_regs.rdi = (long)tcp->childshm;
+    cur_regs.rdi = (long)tcp->childshm;
 #else
-  #error "Unknown architecture (not I386 or X86_64)"
+    #error "Unknown architecture (not I386 or X86_64)"
 #endif
+  }
+  else {
+    assert(arg_num == 2);
+#if defined (I386)
+    cur_regs.ecx = (long)tcp->childshm;
+#elif defined(X86_64)
+    cur_regs.rsi = (long)tcp->childshm;
+#else
+    #error "Unknown architecture (not I386 or X86_64)"
+#endif
+  }
 
   ptrace(PTRACE_SETREGS, tcp->pid, NULL, (long)&cur_regs);
 
   free(redirected_filename);
 }
+
 
 // copy and paste from modify_syscall_first_arg ;)
 static void modify_syscall_two_args(struct tcb* tcp) {
@@ -779,7 +795,7 @@ void CDE_begin_standard_fileop(struct tcb* tcp, const char* syscall_name) {
   }
 
   if (CDE_exec_mode) {
-    modify_syscall_first_arg(tcp);
+    modify_syscall_single_arg(tcp, 1);
   }
 }
 
@@ -810,6 +826,52 @@ void CDE_end_standard_fileop(struct tcb* tcp, const char* syscall_name,
 
   free(tcp->opened_filename);
   tcp->opened_filename = NULL;
+}
+
+
+/* standard functionality for *at syscalls that take a dirfd as first
+   argument, followed by a filepath
+   e.g., see documentation for http://linux.die.net/man/2/openat
+
+  example syscalls:
+    openat,faccessat,fstatat64,fchownat,fchmodat,futimesat,mknodat
+
+  if filepath is an absolute path, or if filepath is a relative path but
+  dirfd is AT_FDCWD, then:
+
+  trace mode:
+    - ONLY on success, if abspath(filepath) is outside pwd, then copy it
+      into cde-root/
+
+  exec mode:
+    - if abspath(filepath) is outside pwd, then redirect it into cde-root/
+
+  issue a warning if filepath is a relative path but dirfd is NOT AT_FDCWD
+*/
+void CDE_begin_at_fileop(struct tcb* tcp, const char* syscall_name) {
+  assert(!tcp->opened_filename);
+  tcp->opened_filename = strcpy_from_child(tcp, tcp->u_arg[1]);
+
+  if (CDE_verbose_mode) {
+    printf("BEGIN %s '%s' (dirfd=%d)\n", syscall_name, tcp->opened_filename, tcp->u_arg[0]);
+  }
+
+  if (!IS_ABSPATH(tcp->opened_filename) && tcp->u_arg[0] != AT_FDCWD) {
+    fprintf(stderr,
+            "CDE WARNING: %s '%s' is a relative path and dirfd != AT_FDCWD\n",
+            syscall_name, tcp->opened_filename);
+    return; // punt early!
+  }
+
+  if (CDE_exec_mode) {
+    modify_syscall_single_arg(tcp, 2);
+  }
+}
+
+// we currently do the same thing as CDE_end_standard_fileop
+void CDE_end_at_fileop(struct tcb* tcp, const char* syscall_name,
+                       char success_type) {
+  CDE_end_standard_fileop(tcp, syscall_name, success_type);
 }
 
 
@@ -989,7 +1051,7 @@ void CDE_begin_execve(struct tcb* tcp) {
       // binary, so let the execve call proceed normally
       if (CDE_exec_mode) {
         // redirect the executable's path to within $CDE_ROOT_DIR:
-        modify_syscall_first_arg(tcp);
+        modify_syscall_single_arg(tcp, 1);
       }
 
       // remember to EXIT EARLY!
@@ -1057,7 +1119,7 @@ void CDE_begin_execve(struct tcb* tcp) {
       // need to do something better here (think harder about this case!)
       if (CDE_exec_mode) {
         // redirect the executable's path to within $CDE_ROOT_DIR:
-        modify_syscall_first_arg(tcp);
+        modify_syscall_single_arg(tcp, 1);
       }
 
       goto done;
@@ -1375,7 +1437,7 @@ void CDE_begin_file_unlink(struct tcb* tcp) {
   //printf("CDE_begin_file_unlink %s\n", tcp->opened_filename);
 
   if (CDE_exec_mode) {
-    modify_syscall_first_arg(tcp);
+    modify_syscall_single_arg(tcp, 1);
   }
   else {
     char* redirected_path =

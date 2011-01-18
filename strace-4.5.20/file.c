@@ -36,6 +36,11 @@
 extern void CDE_begin_standard_fileop(struct tcb* tcp, const char* syscall_name);
 extern void CDE_end_standard_fileop(struct tcb* tcp, const char* syscall_name,
                                     char success_type);
+
+extern void CDE_begin_at_fileop(struct tcb* tcp, const char* syscall_name);
+extern void CDE_end_at_fileop(struct tcb* tcp, const char* syscall_name,
+                              char success_type);
+
 extern void CDE_begin_file_unlink(struct tcb* tcp);
 
 extern void CDE_begin_file_link(struct tcb* tcp);
@@ -63,6 +68,14 @@ extern void CDE_end_getcwd(struct tcb* tcp);
   } \
   else { \
     CDE_end_standard_fileop(tcp, __FUNCTION__, success_type); \
+  }
+
+#define CDE_at_fileop_macro(tcp, success_type) \
+  if (entering(tcp)) { \
+    CDE_begin_at_fileop(tcp, __FUNCTION__); \
+  } \
+  else { \
+    CDE_end_at_fileop(tcp, __FUNCTION__, success_type); \
   }
 
 
@@ -463,9 +476,15 @@ sys_open(struct tcb *tcp)
 int
 sys_openat(struct tcb *tcp)
 {
+  // modified by pgbovine
+  CDE_at_fileop_macro(tcp, 1); // remember success_type = 1 here
+  return 0;
+
+  /*
 	if (entering(tcp))
 		print_dirfd(tcp->u_arg[0]);
 	return decode_open(tcp, 1);
+  */
 }
 #endif
 
@@ -560,9 +579,14 @@ sys_access(struct tcb *tcp)
 int
 sys_faccessat(struct tcb *tcp)
 {
+  CDE_at_fileop_macro(tcp, 0); // pgbovine
+  return 0;
+
+  /*
 	if (entering(tcp))
 		print_dirfd(tcp->u_arg[0]);
 	return decode_access(tcp, 1);
+  */
 }
 #endif
 
@@ -1322,6 +1346,10 @@ static const struct xlat fstatatflags[] = {
 int
 sys_newfstatat(struct tcb *tcp)
 {
+  CDE_at_fileop_macro(tcp, 0); // pgbovine
+  return 0;
+
+  /*
 	if (entering(tcp)) {
 		print_dirfd(tcp->u_arg[0]);
 		printpath(tcp, tcp->u_arg[1]);
@@ -1336,6 +1364,7 @@ sys_newfstatat(struct tcb *tcp)
 		printflags(fstatatflags, tcp->u_arg[3], "AT_???");
 	}
 	return 0;
+  */
 }
 #endif
 
@@ -2236,6 +2265,10 @@ sys_chown(struct tcb *tcp)
 int
 sys_fchownat(struct tcb *tcp)
 {
+  CDE_at_fileop_macro(tcp, 0); // pgbovine
+  return 0;
+
+  /*
 	if (entering(tcp)) {
 		print_dirfd(tcp->u_arg[0]);
 		printpath(tcp, tcp->u_arg[1]);
@@ -2244,6 +2277,7 @@ sys_fchownat(struct tcb *tcp)
 		tprintf(", ");
 		printflags(fstatatflags, tcp->u_arg[4], "AT_???");
 	}
+  */
 	return 0;
 }
 #endif
@@ -2282,9 +2316,14 @@ sys_chmod(struct tcb *tcp)
 int
 sys_fchmodat(struct tcb *tcp)
 {
+  CDE_at_fileop_macro(tcp, 0); // pgbovine
+  return 0;
+
+  /*
 	if (entering(tcp))
 		print_dirfd(tcp->u_arg[0]);
 	return decode_chmod(tcp, 1);
+  */
 }
 #endif
 
@@ -2347,9 +2386,14 @@ sys_utimes(struct tcb *tcp)
 int
 sys_futimesat(struct tcb *tcp)
 {
+  CDE_at_fileop_macro(tcp, 0); // pgbovine
+  return 0;
+
+  /*
 	if (entering(tcp))
 		print_dirfd(tcp->u_arg[0]);
 	return decode_utimes(tcp, 1, 0);
+  */
 }
 
 int
@@ -2446,9 +2490,14 @@ sys_mknod(struct tcb *tcp)
 int
 sys_mknodat(struct tcb *tcp)
 {
+  CDE_at_fileop_macro(tcp, 0); // pgbovine
+  return 0;
+
+  /*
 	if (entering(tcp))
 		print_dirfd(tcp->u_arg[0]);
 	return decode_mknod(tcp, 1);
+  */
 }
 #endif
 
