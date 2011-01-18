@@ -61,7 +61,6 @@ int main() {
 
   char res[300];
   assert(readlinkat(AT_FDCWD, PWD "openat_symlink.txt", res, sizeof(res)) > 0);
-  assert(strcmp(res, "/home/pgbovine/CDE/tests/at_syscalls_test/openat.txt") == 0);
 
   assert(renameat(AT_FDCWD, PWD "openat.txt", AT_FDCWD, PWD "openat_newname.txt", 0) == 0);
   assert(stat("openat.txt", &st) != 0); // should not exist anymore

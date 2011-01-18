@@ -42,22 +42,39 @@ extern void CDE_end_at_fileop(struct tcb* tcp, const char* syscall_name,
                               char success_type);
 
 extern void CDE_begin_file_unlink(struct tcb* tcp);
+extern void CDE_begin_file_unlinkat(struct tcb* tcp);
 
 extern void CDE_begin_file_link(struct tcb* tcp);
 extern void CDE_end_file_link(struct tcb* tcp);
+extern void CDE_begin_file_linkat(struct tcb* tcp);
+extern void CDE_end_file_linkat(struct tcb* tcp);
+
 extern void CDE_end_readlink(struct tcb* tcp);
+extern void CDE_end_readlinkat(struct tcb* tcp);
+
 extern void CDE_begin_file_symlink(struct tcb* tcp);
 extern void CDE_end_file_symlink(struct tcb* tcp);
+extern void CDE_begin_file_symlinkat(struct tcb* tcp);
+extern void CDE_end_file_symlinkat(struct tcb* tcp);
+
 extern void CDE_begin_file_rename(struct tcb* tcp);
 extern void CDE_end_file_rename(struct tcb* tcp);
+extern void CDE_begin_file_renameat(struct tcb* tcp);
+extern void CDE_end_file_renameat(struct tcb* tcp);
 
 extern void CDE_begin_chdir(struct tcb* tcp);
 extern void CDE_end_chdir(struct tcb* tcp);
 extern void CDE_end_fchdir(struct tcb* tcp);
+
 extern void CDE_begin_mkdir(struct tcb* tcp);
 extern void CDE_end_mkdir(struct tcb* tcp);
+extern void CDE_begin_mkdirat(struct tcb* tcp);
+extern void CDE_end_mkdirat(struct tcb* tcp);
+
 extern void CDE_begin_rmdir(struct tcb* tcp);
 extern void CDE_end_rmdir(struct tcb* tcp);
+extern void CDE_begin_unlinkat_rmdir(struct tcb* tcp);
+extern void CDE_end_unlinkat_rmdir(struct tcb* tcp);
 
 extern void CDE_end_getcwd(struct tcb* tcp);
 
@@ -1986,9 +2003,20 @@ sys_mkdir(struct tcb *tcp)
 int
 sys_mkdirat(struct tcb *tcp)
 {
+  // pgbovine
+  if (entering(tcp)) {
+    CDE_begin_mkdirat(tcp);
+  }
+  else {
+    CDE_end_mkdirat(tcp);
+  }
+  return 0;
+
+  /*
 	if (entering(tcp))
 		print_dirfd(tcp->u_arg[0]);
 	return decode_mkdir(tcp, 1);
+  */
 }
 #endif
 
@@ -2078,6 +2106,16 @@ sys_link(struct tcb *tcp)
 int
 sys_linkat(struct tcb *tcp)
 {
+  // pgbovine
+  if (entering(tcp)) {
+    CDE_begin_file_linkat(tcp);
+  }
+  else {
+    CDE_end_file_linkat(tcp);
+  }
+  return 0;
+
+  /*
 	if (entering(tcp)) {
 		print_dirfd(tcp->u_arg[0]);
 		printpath(tcp, tcp->u_arg[1]);
@@ -2087,6 +2125,7 @@ sys_linkat(struct tcb *tcp)
 		tprintf(", %ld", tcp->u_arg[4]);
 	}
 	return 0;
+  */
 }
 #endif
 
@@ -2119,6 +2158,27 @@ static const struct xlat unlinkatflags[] = {
 int
 sys_unlinkat(struct tcb *tcp)
 {
+  // modified by pgbovine
+  if (tcp->u_arg[2] == AT_REMOVEDIR) {
+    // act like rmdir()
+    if (entering(tcp)) {
+      CDE_begin_unlinkat_rmdir(tcp);
+    }
+    else {
+      CDE_end_unlinkat_rmdir(tcp);
+    }
+  }
+  else {
+    // act like unlink()
+    if (entering(tcp)) {
+      CDE_begin_file_unlinkat(tcp);
+    }
+  }
+
+  return 0;
+
+
+  /*
 	if (entering(tcp)) {
 		print_dirfd(tcp->u_arg[0]);
 		printpath(tcp, tcp->u_arg[1]);
@@ -2126,6 +2186,7 @@ sys_unlinkat(struct tcb *tcp)
 		printflags(unlinkatflags, tcp->u_arg[2], "AT_???");
 	}
 	return 0;
+  */
 }
 #endif
 
@@ -2155,6 +2216,16 @@ sys_symlink(struct tcb *tcp)
 int
 sys_symlinkat(struct tcb *tcp)
 {
+  // pgbovine
+  if (entering(tcp)) {
+    CDE_begin_file_symlinkat(tcp);
+  }
+  else {
+    CDE_end_file_symlinkat(tcp);
+  }
+  return 0;
+
+  /*
 	if (entering(tcp)) {
 		printpath(tcp, tcp->u_arg[0]);
 		tprintf(", ");
@@ -2162,6 +2233,7 @@ sys_symlinkat(struct tcb *tcp)
 		printpath(tcp, tcp->u_arg[2]);
 	}
 	return 0;
+  */
 }
 #endif
 
@@ -2202,9 +2274,19 @@ sys_readlink(struct tcb *tcp)
 int
 sys_readlinkat(struct tcb *tcp)
 {
+  // pgbovine
+  if (entering(tcp)) {
+    CDE_begin_at_fileop(tcp, __FUNCTION__);
+  }
+  else {
+    CDE_end_readlinkat(tcp);
+  }
+
+  /*
 	if (entering(tcp))
 		print_dirfd(tcp->u_arg[0]);
 	return decode_readlink(tcp, 1);
+  */
 }
 #endif
 
@@ -2234,6 +2316,16 @@ sys_rename(struct tcb *tcp)
 int
 sys_renameat(struct tcb *tcp)
 {
+  // pgbovine
+  if (entering(tcp)) {
+    CDE_begin_file_renameat(tcp);
+  }
+  else {
+    CDE_end_file_renameat(tcp);
+  }
+  return 0;
+
+  /*
 	if (entering(tcp)) {
 		print_dirfd(tcp->u_arg[0]);
 		printpath(tcp, tcp->u_arg[1]);
@@ -2242,6 +2334,7 @@ sys_renameat(struct tcb *tcp)
 		printpath(tcp, tcp->u_arg[3]);
 	}
 	return 0;
+  */
 }
 #endif
 

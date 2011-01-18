@@ -11,10 +11,12 @@ e.g.,:
   futimesat
   mknodat
 
-  mkdirat
-  unlinkat
-  renameat
   linkat
   symlinkat
+  renameat
   readlinkat
+
+  mkdirat
+
+  unlinkat (both with and without AT_REMOVEDIR)
 

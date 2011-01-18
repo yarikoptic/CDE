@@ -700,6 +700,166 @@ static void modify_syscall_two_args(struct tcb* tcp) {
   if (redirected_filename2) free(redirected_filename2);
 }
 
+// modify the second and fourth args to redirect into cde-root/
+// really nasty copy-and-paste from modify_syscall_two_args above
+static void modify_syscall_second_and_fourth_args(struct tcb* tcp) {
+  assert(CDE_exec_mode);
+
+  if (!tcp->childshm) {
+    begin_setup_shmat(tcp);
+    return; // MUST punt early here!!!
+  }
+
+  char* filename1 = strcpy_from_child(tcp, tcp->u_arg[1]);
+  char* redirected_filename1 =
+    redirect_filename_into_cderoot(filename1, tcp->current_dir);
+  free(filename1);
+
+  char* filename2 = strcpy_from_child(tcp, tcp->u_arg[3]);
+  char* redirected_filename2 =
+    redirect_filename_into_cderoot(filename2, tcp->current_dir);
+  free(filename2);
+
+  // gotta do both, yuck
+  if (redirected_filename1 && redirected_filename2) {
+    strcpy(tcp->localshm, redirected_filename1);
+
+    int len1 = strlen(redirected_filename1);
+    char* redirect_file2_begin = ((char*)tcp->localshm) + len1 + 1;
+    strcpy(redirect_file2_begin, redirected_filename2);
+
+    struct user_regs_struct cur_regs;
+    EXITIF(ptrace(PTRACE_GETREGS, tcp->pid, NULL, (long)&cur_regs) < 0);
+
+#if defined (I386)
+    cur_regs.ecx = (long)tcp->childshm;
+    cur_regs.esi = (long)(((char*)tcp->childshm) + len1 + 1);
+#elif defined(X86_64)
+    cur_regs.rsi = (long)tcp->childshm;
+    cur_regs.rcx = (long)(((char*)tcp->childshm) + len1 + 1);
+#else
+  #error "Unknown architecture (not I386 or X86_64)"
+#endif
+
+    ptrace(PTRACE_SETREGS, tcp->pid, NULL, (long)&cur_regs);
+  }
+  else if (redirected_filename1) {
+    strcpy(tcp->localshm, redirected_filename1);
+
+    struct user_regs_struct cur_regs;
+    EXITIF(ptrace(PTRACE_GETREGS, tcp->pid, NULL, (long)&cur_regs) < 0);
+
+#if defined (I386)
+    cur_regs.ecx = (long)tcp->childshm;
+#elif defined(X86_64)
+    cur_regs.rsi = (long)tcp->childshm;
+#else
+  #error "Unknown architecture (not I386 or X86_64)"
+#endif
+
+    ptrace(PTRACE_SETREGS, tcp->pid, NULL, (long)&cur_regs);
+  }
+  else if (redirected_filename2) {
+    strcpy(tcp->localshm, redirected_filename2);
+
+    struct user_regs_struct cur_regs;
+    EXITIF(ptrace(PTRACE_GETREGS, tcp->pid, NULL, (long)&cur_regs) < 0);
+
+#if defined (I386)
+    cur_regs.esi = (long)tcp->childshm; // only set ECX
+#elif defined(X86_64)
+    cur_regs.rcx = (long)tcp->childshm;
+#else
+  #error "Unknown architecture (not I386 or X86_64)"
+#endif
+
+    ptrace(PTRACE_SETREGS, tcp->pid, NULL, (long)&cur_regs);
+  }
+
+  if (redirected_filename1) free(redirected_filename1);
+  if (redirected_filename2) free(redirected_filename2);
+}
+
+// modify the first and third args to redirect into cde-root/
+// really nasty copy-and-paste from modify_syscall_two_args above
+static void modify_syscall_first_and_third_args(struct tcb* tcp) {
+  assert(CDE_exec_mode);
+
+  if (!tcp->childshm) {
+    begin_setup_shmat(tcp);
+    return; // MUST punt early here!!!
+  }
+
+  char* filename1 = strcpy_from_child(tcp, tcp->u_arg[0]);
+  char* redirected_filename1 =
+    redirect_filename_into_cderoot(filename1, tcp->current_dir);
+  free(filename1);
+
+  char* filename2 = strcpy_from_child(tcp, tcp->u_arg[2]);
+  char* redirected_filename2 =
+    redirect_filename_into_cderoot(filename2, tcp->current_dir);
+  free(filename2);
+
+  // gotta do both, yuck
+  if (redirected_filename1 && redirected_filename2) {
+    strcpy(tcp->localshm, redirected_filename1);
+
+    int len1 = strlen(redirected_filename1);
+    char* redirect_file2_begin = ((char*)tcp->localshm) + len1 + 1;
+    strcpy(redirect_file2_begin, redirected_filename2);
+
+    struct user_regs_struct cur_regs;
+    EXITIF(ptrace(PTRACE_GETREGS, tcp->pid, NULL, (long)&cur_regs) < 0);
+
+#if defined (I386)
+    cur_regs.ebx = (long)tcp->childshm;
+    cur_regs.edx = (long)(((char*)tcp->childshm) + len1 + 1);
+#elif defined(X86_64)
+    cur_regs.rdi = (long)tcp->childshm;
+    cur_regs.rdx = (long)(((char*)tcp->childshm) + len1 + 1);
+#else
+  #error "Unknown architecture (not I386 or X86_64)"
+#endif
+
+    ptrace(PTRACE_SETREGS, tcp->pid, NULL, (long)&cur_regs);
+  }
+  else if (redirected_filename1) {
+    strcpy(tcp->localshm, redirected_filename1);
+
+    struct user_regs_struct cur_regs;
+    EXITIF(ptrace(PTRACE_GETREGS, tcp->pid, NULL, (long)&cur_regs) < 0);
+
+#if defined (I386)
+    cur_regs.ebx = (long)tcp->childshm;
+#elif defined(X86_64)
+    cur_regs.rdi = (long)tcp->childshm;
+#else
+  #error "Unknown architecture (not I386 or X86_64)"
+#endif
+
+    ptrace(PTRACE_SETREGS, tcp->pid, NULL, (long)&cur_regs);
+  }
+  else if (redirected_filename2) {
+    strcpy(tcp->localshm, redirected_filename2);
+
+    struct user_regs_struct cur_regs;
+    EXITIF(ptrace(PTRACE_GETREGS, tcp->pid, NULL, (long)&cur_regs) < 0);
+
+#if defined (I386)
+    cur_regs.edx = (long)tcp->childshm; // only set ECX
+#elif defined(X86_64)
+    cur_regs.rdx = (long)tcp->childshm;
+#else
+  #error "Unknown architecture (not I386 or X86_64)"
+#endif
+
+    ptrace(PTRACE_SETREGS, tcp->pid, NULL, (long)&cur_regs);
+  }
+
+  if (redirected_filename1) free(redirected_filename1);
+  if (redirected_filename2) free(redirected_filename2);
+}
+
 
 // create a malloc'ed filename that contains a version within cde-root/
 // return NULL if the filename should NOT be redirected
@@ -875,7 +1035,9 @@ void CDE_end_at_fileop(struct tcb* tcp, const char* syscall_name,
 }
 
 
-void CDE_end_readlink(struct tcb* tcp) {
+// output_buffer_arg_index is the index of the argument where the output
+// buffer is being held (we clobber this in some special cases)
+static void CDE_end_readlink_internal(struct tcb* tcp, int output_buffer_arg_index) {
   assert(tcp->opened_filename);
  
   if (CDE_exec_mode) {
@@ -905,7 +1067,7 @@ void CDE_end_readlink(struct tcb* tcp) {
 
       if ((is_proc_self_exe || is_proc_self_pid_exe) &&
           tcp->perceived_program_fullpath) {
-        memcpy_to_child(tcp->pid, (char*)tcp->u_arg[1],
+        memcpy_to_child(tcp->pid, (char*)tcp->u_arg[output_buffer_arg_index],
                         tcp->perceived_program_fullpath,
                         strlen(tcp->perceived_program_fullpath) + 1);
 
@@ -931,7 +1093,7 @@ void CDE_end_readlink(struct tcb* tcp) {
       else if (strcmp(tcp->opened_filename, "/proc/self/cwd") == 0) {
         // copied from CDE_end_getcwd
         char* sandboxed_pwd = extract_sandboxed_pwd(tcp->current_dir);
-        memcpy_to_child(tcp->pid, (char*)tcp->u_arg[1],
+        memcpy_to_child(tcp->pid, (char*)tcp->u_arg[output_buffer_arg_index],
                         sandboxed_pwd, strlen(sandboxed_pwd) + 1);
 
         // VERY SUBTLE - set %eax (the syscall return value) to the length
@@ -959,6 +1121,16 @@ void CDE_end_readlink(struct tcb* tcp) {
 
   free(tcp->opened_filename);
   tcp->opened_filename = NULL;
+}
+
+void CDE_end_readlink(struct tcb* tcp) {
+  // output buffer is second argument (index 1)
+  CDE_end_readlink_internal(tcp, 1);
+}
+
+void CDE_end_readlinkat(struct tcb* tcp) {
+  // output buffer is third argument (index 2)
+  CDE_end_readlink_internal(tcp, 2);
 }
 
 
@@ -1453,6 +1625,30 @@ void CDE_begin_file_unlink(struct tcb* tcp) {
   tcp->opened_filename = NULL;
 }
 
+// copy-and-paste from CDE_begin_file_unlink,
+// except adjusting for unlinkat signature:
+//   int unlinkat(int dirfd, const char *pathname, int flags);
+void CDE_begin_file_unlinkat(struct tcb* tcp) {
+  assert(!tcp->opened_filename);
+  tcp->opened_filename = strcpy_from_child(tcp, tcp->u_arg[1]);
+
+  if (CDE_exec_mode) {
+    modify_syscall_single_arg(tcp, 2);
+  }
+  else {
+    char* redirected_path =
+      redirect_filename_into_cderoot(tcp->opened_filename, tcp->current_dir);
+    if (redirected_path) {
+      unlink(redirected_path);
+      free(redirected_path);
+    }
+  }
+
+  // no need for this anymore
+  free(tcp->opened_filename);
+  tcp->opened_filename = NULL;
+}
+
 
 void CDE_begin_file_link(struct tcb* tcp) {
   //printf("CDE_begin_file_link\n");
@@ -1487,6 +1683,62 @@ void CDE_end_file_link(struct tcb* tcp) {
   }
 }
 
+// copy-and-paste from file_link functions above,
+// except adjusting for linkat signature:
+//   linkat(int olddirfd, char* oldpath, int newdirfd, char* newpath, int flags);
+void CDE_begin_file_linkat(struct tcb* tcp) {
+  char* oldpath = strcpy_from_child(tcp, tcp->u_arg[1]);
+  char* newpath = strcpy_from_child(tcp, tcp->u_arg[3]);
+
+  if (!IS_ABSPATH(oldpath) && tcp->u_arg[0] != AT_FDCWD) {
+    fprintf(stderr,
+            "CDE WARNING: linkat '%s' is a relative path and dirfd != AT_FDCWD\n",
+            oldpath);
+    goto done; // punt early!
+  }
+  if (!IS_ABSPATH(newpath) && tcp->u_arg[2] != AT_FDCWD) {
+    fprintf(stderr,
+            "CDE WARNING: linkat '%s' is a relative path and dirfd != AT_FDCWD\n",
+            newpath);
+    goto done; // punt early!
+  }
+
+  if (CDE_exec_mode) {
+    modify_syscall_second_and_fourth_args(tcp);
+  }
+
+done:
+  free(oldpath);
+  free(newpath);
+}
+
+void CDE_end_file_linkat(struct tcb* tcp) {
+  if (CDE_exec_mode) {
+    // empty
+  }
+  else {
+    if (tcp->u_rval == 0) {
+      char* filename1 = strcpy_from_child(tcp, tcp->u_arg[1]);
+      char* redirected_filename1 =
+        redirect_filename_into_cderoot(filename1, tcp->current_dir);
+      // first copy the origin file into cde-root/ before trying to link it
+      copy_file_into_cde_root(filename1, tcp->current_dir);
+
+      char* filename2 = strcpy_from_child(tcp, tcp->u_arg[3]);
+      char* redirected_filename2 =
+        redirect_filename_into_cderoot(filename2, tcp->current_dir);
+
+      link(redirected_filename1, redirected_filename2);
+
+      free(filename1);
+      free(filename2);
+      free(redirected_filename1);
+      free(redirected_filename2);
+    }
+  }
+}
+
+
 void CDE_begin_file_symlink(struct tcb* tcp) {
   //printf("CDE_begin_file_symlink\n");
   if (CDE_exec_mode) {
@@ -1502,6 +1754,48 @@ void CDE_end_file_symlink(struct tcb* tcp) {
     if (tcp->u_rval == 0) {
       char* oldname = strcpy_from_child(tcp, tcp->u_arg[0]);
       char* newname = strcpy_from_child(tcp, tcp->u_arg[1]);
+      char* newname_redirected =
+        redirect_filename_into_cderoot(newname, tcp->current_dir);
+
+      symlink(oldname, newname_redirected);
+
+      free(oldname);
+      free(newname);
+      free(newname_redirected);
+    }
+  }
+}
+
+
+// copy-and-paste from above,
+// except adjusting for symlinkat signature:
+//   symlinkat(char* oldpath, int newdirfd, char* newpath);
+void CDE_begin_file_symlinkat(struct tcb* tcp) {
+  char* newpath = strcpy_from_child(tcp, tcp->u_arg[2]);
+
+  if (!IS_ABSPATH(newpath) && tcp->u_arg[1] != AT_FDCWD) {
+    fprintf(stderr,
+            "CDE WARNING: symlinkat '%s' is a relative path and dirfd != AT_FDCWD\n",
+            newpath);
+    free(newpath);
+    return; // punt early!
+  }
+  
+  if (CDE_exec_mode) {
+    modify_syscall_first_and_third_args(tcp);
+  }
+
+  free(newpath);
+}
+
+void CDE_end_file_symlinkat(struct tcb* tcp) {
+  if (CDE_exec_mode) {
+    // empty
+  }
+  else {
+    if (tcp->u_rval == 0) {
+      char* oldname = strcpy_from_child(tcp, tcp->u_arg[0]);
+      char* newname = strcpy_from_child(tcp, tcp->u_arg[2]);
       char* newname_redirected =
         redirect_filename_into_cderoot(newname, tcp->current_dir);
 
@@ -1544,6 +1838,61 @@ void CDE_end_file_rename(struct tcb* tcp) {
     }
   }
 }
+
+
+// copy-and-paste from file_rename functions above,
+// except adjusting for linkat signature:
+//   renameat(int olddirfd, char* oldpath, int newdirfd, char* newpath);
+void CDE_begin_file_renameat(struct tcb* tcp) {
+  char* oldpath = strcpy_from_child(tcp, tcp->u_arg[1]);
+  char* newpath = strcpy_from_child(tcp, tcp->u_arg[3]);
+
+  if (!IS_ABSPATH(oldpath) && tcp->u_arg[0] != AT_FDCWD) {
+    fprintf(stderr,
+            "CDE WARNING: renameat '%s' is a relative path and dirfd != AT_FDCWD\n",
+            oldpath);
+    goto done; // punt early!
+  }
+  if (!IS_ABSPATH(newpath) && tcp->u_arg[2] != AT_FDCWD) {
+    fprintf(stderr,
+            "CDE WARNING: renameat '%s' is a relative path and dirfd != AT_FDCWD\n",
+            newpath);
+    goto done; // punt early!
+  }
+
+  if (CDE_exec_mode) {
+    modify_syscall_second_and_fourth_args(tcp);
+  }
+
+done:
+  free(oldpath);
+  free(newpath);
+}
+
+void CDE_end_file_renameat(struct tcb* tcp) {
+  if (CDE_exec_mode) {
+    // empty
+  }
+  else {
+    if (tcp->u_rval == 0) {
+      char* filename1 = strcpy_from_child(tcp, tcp->u_arg[1]);
+      char* redirected_filename1 =
+        redirect_filename_into_cderoot(filename1, tcp->current_dir);
+      free(filename1);
+      // remove original file from cde-root/
+      if (redirected_filename1) {
+        unlink(redirected_filename1);
+        free(redirected_filename1);
+      }
+
+      // copy the destination file into cde-root/
+      char* dst_filename = strcpy_from_child(tcp, tcp->u_arg[3]);
+      copy_file_into_cde_root(dst_filename, tcp->current_dir);
+      free(dst_filename);
+    }
+  }
+}
+
 
 void CDE_begin_chdir(struct tcb* tcp) {
   CDE_begin_standard_fileop(tcp, "chdir");
@@ -1614,6 +1963,18 @@ void CDE_end_mkdir(struct tcb* tcp) {
   tcp->opened_filename = NULL;
 }
 
+// copy-and-paste from mkdir functions above,
+// except adjusting for mkdirat signature:
+//   int mkdirat(int dirfd, const char *pathname, mode_t mode);
+void CDE_begin_mkdirat(struct tcb* tcp) {
+  CDE_begin_at_fileop(tcp, "mkdirat");
+}
+
+void CDE_end_mkdirat(struct tcb* tcp) {
+  CDE_end_mkdir(tcp);
+}
+
+
 void CDE_begin_rmdir(struct tcb* tcp) {
   CDE_begin_standard_fileop(tcp, "rmdir");
 }
@@ -1637,6 +1998,15 @@ void CDE_end_rmdir(struct tcb* tcp) {
 
   free(tcp->opened_filename);
   tcp->opened_filename = NULL;
+}
+
+
+void CDE_begin_unlinkat_rmdir(struct tcb* tcp) {
+  CDE_begin_at_fileop(tcp, "unlinkat_rmdir");
+}
+
+void CDE_end_unlinkat_rmdir(struct tcb* tcp) {
+  CDE_end_rmdir(tcp);
 }
 
 
