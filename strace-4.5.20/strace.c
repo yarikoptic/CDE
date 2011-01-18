@@ -916,7 +916,9 @@ main(int argc, char *argv[])
 
   // pgbovine - only track selected system calls
   // qualify actually mutates this string, so we can't pass in a constant
-  char* tmp = strdup("trace=open,execve,stat,stat64,lstat,lstat64,oldstat,oldlstat,link,symlink,unlink,rename,access,creat,chmod,chown,chown32,lchown,lchown32,readlink,utime,truncate,truncate64,chdir,fchdir,mkdir,rmdir,getcwd,mknod,bind,connect");
+  //
+  // syscalls added after Jan 1, 2011: utimes
+  char* tmp = strdup("trace=open,execve,stat,stat64,lstat,lstat64,oldstat,oldlstat,link,symlink,unlink,rename,access,creat,chmod,chown,chown32,lchown,lchown32,readlink,utime,truncate,truncate64,chdir,fchdir,mkdir,rmdir,getcwd,mknod,bind,connect,utimes");
 	qualify(tmp);
   free(tmp);
 

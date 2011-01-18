@@ -4,17 +4,17 @@ http://linux.die.net/man/2/openat
 
 e.g.,:
   openat
-  faccessat
-  fchmodat
-  fchownat
-  fstatat
-  futimesat
-  linkat
   mkdirat
   mknodat
-  readlinkat
-  renameat
-  symlinkat
+  fchownat
+  futimesat
+  fstatat
+  fstatat64
   unlinkat
-  mkfifoat
+  renameat
+  linkat
+  symlinkat
+  readlinkat
+  fchmodat
+  faccessat
 

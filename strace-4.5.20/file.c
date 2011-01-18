@@ -2335,7 +2335,12 @@ decode_utimes(struct tcb *tcp, int offset, int special)
 int
 sys_utimes(struct tcb *tcp)
 {
+  CDE_standard_fileop_macro(tcp, 0); // pgbovine
+  return 0;
+
+  /*
 	return decode_utimes(tcp, 0, 0);
+  */
 }
 
 #ifdef LINUX

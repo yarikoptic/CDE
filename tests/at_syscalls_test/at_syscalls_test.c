@@ -76,10 +76,6 @@ int main() {
   assert(stat("mknodat.fifo", &st) == 0); // relative path
   unlinkat(AT_FDCWD, PWD "mknodat.fifo", 0);
 
-  mkfifoat(AT_FDCWD, PWD "mkfifoat.fifo", 0644);
-  assert(stat("mkfifoat.fifo", &st) == 0); // relative path
-  unlinkat(AT_FDCWD, PWD "mkfifoat.fifo", 0);
-
   mkdirat(AT_FDCWD, PWD "mkdirat_dir", 0);
   assert(stat("mkdirat_dir", &st) == 0); // relative path
   unlinkat(AT_FDCWD, PWD "mkdirat_dir", AT_REMOVEDIR); // like 'rmdir'
