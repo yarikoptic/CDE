@@ -549,7 +549,8 @@ done:
 // modify a single argument to the given system call
 // to a path within cde-root/, if applicable
 //
-// assumes tcp->opened_filename has already been set
+// assumes tcp->opened_filename has already been set,
+// which will be the filename that we are redirecting
 //
 // arg_num == 1 mean modify first register arg
 // arg_num == 2 mean modify second register arg
@@ -1632,6 +1633,13 @@ void CDE_begin_file_unlinkat(struct tcb* tcp) {
   assert(!tcp->opened_filename);
   tcp->opened_filename = strcpy_from_child(tcp, tcp->u_arg[1]);
 
+  if (!IS_ABSPATH(tcp->opened_filename) && tcp->u_arg[0] != AT_FDCWD) {
+    fprintf(stderr,
+            "CDE WARNING: unlinkat '%s' is a relative path and dirfd != AT_FDCWD\n",
+            tcp->opened_filename);
+    goto done; // punt early!
+  }
+
   if (CDE_exec_mode) {
     modify_syscall_single_arg(tcp, 2);
   }
@@ -1644,6 +1652,8 @@ void CDE_begin_file_unlinkat(struct tcb* tcp) {
     }
   }
 
+
+done:
   // no need for this anymore
   free(tcp->opened_filename);
   tcp->opened_filename = NULL;
