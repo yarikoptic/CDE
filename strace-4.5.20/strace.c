@@ -198,16 +198,16 @@ int exitval;
 {
   if (CDE_exec_mode) {
     fprintf(ofp,
-            "CDEpack: Code, Data, and Environment packaging for Linux\n"
+            "CDE: Code, Data, and Environment packaging for Linux\n"
             "Copyright 2010 Philip Guo (pg@cs.stanford.edu)\n"
-            "http://www.stanford.edu/~pgbovine/cdepack.html\n\n"
+            "http://www.stanford.edu/~pgbovine/cde.html\n\n"
             "usage: cde-exec [command within cde-root/ to run]\n");
   }
   else {
     fprintf(ofp,
-            "CDEpack: Code, Data, and Environment packaging for Linux\n"
+            "CDE: Code, Data, and Environment packaging for Linux\n"
             "Copyright 2010 Philip Guo (pg@cs.stanford.edu)\n"
-            "http://www.stanford.edu/~pgbovine/cdepack.html\n\n"
+            "http://www.stanford.edu/~pgbovine/cde.html\n\n"
             "usage: cde [command to run and package]\n");
   }
 
