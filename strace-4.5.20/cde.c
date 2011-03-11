@@ -4,8 +4,6 @@ CDE: Code, Data, and Environment packaging for Linux
 http://www.stanford.edu/~pgbovine/cde.html
 Philip Guo
 
-[I usually refer to this project by its original name: 'CDE']
-
 CDE is currently licensed under GPL v3:
 
   Copyright (c) 2010 Philip Guo <pg@cs.stanford.edu>
@@ -1019,7 +1017,7 @@ void CDE_begin_at_fileop(struct tcb* tcp, const char* syscall_name) {
 
   if (!IS_ABSPATH(tcp->opened_filename) && tcp->u_arg[0] != AT_FDCWD) {
     fprintf(stderr,
-            "CDE WARNING: %s '%s' is a relative path and dirfd != AT_FDCWD\n",
+            "CDE WARNING (unsupported operation): %s '%s' is a relative path and dirfd != AT_FDCWD\n",
             syscall_name, tcp->opened_filename);
     return; // punt early!
   }
@@ -1032,6 +1030,13 @@ void CDE_begin_at_fileop(struct tcb* tcp, const char* syscall_name) {
 // we currently do the same thing as CDE_end_standard_fileop
 void CDE_end_at_fileop(struct tcb* tcp, const char* syscall_name,
                        char success_type) {
+  // punt early for this special case (see CDE_begin_at_fileop)
+  if (!IS_ABSPATH(tcp->opened_filename) && tcp->u_arg[0] != AT_FDCWD) {
+    free(tcp->opened_filename);
+    tcp->opened_filename = NULL;
+    return;
+  }
+
   CDE_end_standard_fileop(tcp, syscall_name, success_type);
 }
 
