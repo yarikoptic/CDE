@@ -93,6 +93,7 @@ extern char *optarg;
 
 // pgbovine
 extern char CDE_exec_mode;
+extern char CDE_provenance_mode; // -p option
 extern char CDE_verbose_mode; // -v option
 extern void alloc_tcb_CDE_fields(struct tcb* tcp);
 extern void free_tcb_CDE_fields(struct tcb* tcp);
@@ -210,6 +211,10 @@ int exitval;
             "http://www.stanford.edu/~pgbovine/cde.html\n\n"
             "usage: cde [command to run and package]\n");
   }
+
+  fprintf(ofp, "\nOptions\n");
+  fprintf(ofp, "  -p  : Provenance mode (output a provenance graph)\n");
+  fprintf(ofp, "  -v  : Verbose mode (for debugging)\n");
 
   /*
   fprintf(ofp, "\nOptions\n");
@@ -928,11 +933,11 @@ main(int argc, char *argv[])
 	qualify("verbose=all");
 	qualify("signal=all");
 	while ((c = getopt(argc, argv,
-		"+cCdfFhqrtTvVxz"
+		"+cCdfFhqrtTvVxzp"
 #ifndef USE_PROCFS
 		"D"
 #endif
-		"a:A:e:o:O:p:s:S:u:E:i:I:")) != EOF) {
+		"a:A:e:o:O:s:S:u:E:i:I:")) != EOF) {
 		switch (c) {
 		case 'c':
 			if (cflag == CFLAG_BOTH) {
@@ -1024,6 +1029,9 @@ main(int argc, char *argv[])
 			set_overhead(atoi(optarg));
 			break;
 		case 'p':
+      // pgbovine - hijack for the '-p' option
+      CDE_provenance_mode = 1;
+      /*
 			if ((pid = atoi(optarg)) <= 0) {
 				fprintf(stderr, "%s: Invalid process id: %s\n",
 					progname, optarg);
@@ -1037,6 +1045,7 @@ main(int argc, char *argv[])
       CDE_init_tcb_dir_fields(tcp); // pgbovine
 			tcp->flags |= TCB_ATTACHED;
 			pflag_seen++;
+      */
 			break;
 		case 's':
 			max_strlen = atoi(optarg);

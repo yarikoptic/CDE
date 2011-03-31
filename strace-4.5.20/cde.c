@@ -55,6 +55,8 @@ __asm__(".symver shmctl,shmctl@GLIBC_2.0"); // hack to eliminate glibc 2.2 depen
 // 1 if we are executing code in a CDE package,
 // 0 for tracing regular execution
 char CDE_exec_mode;
+
+char CDE_provenance_mode = 0; // -p option
 char CDE_verbose_mode = 0; // -v option
 
 static char cde_options_initialized = 0; // set to 1 after CDE_init_options() done
@@ -977,6 +979,39 @@ void CDE_end_standard_fileop(struct tcb* tcp, const char* syscall_name,
     // empty
   }
   else {
+
+    if (CDE_provenance_mode) {
+      // only track open syscalls
+      if ((success_type == 1) && (tcp->u_rval >= 0) &&
+          strcmp(syscall_name, "sys_open") == 0) {
+        // Note: tcp->u_arg[1] is only for open(), not openat()
+        unsigned char open_mode = (tcp->u_arg[1] & 3);
+        char is_read = 0;
+        char is_write = 0;
+        if (open_mode == O_RDONLY) {
+          is_read = 1;
+        }
+        else if (open_mode == O_WRONLY) {
+          is_write = 1;
+        }
+        else if (open_mode == O_RDWR) {
+          is_read = 1;
+          is_write = 1;
+        }
+        assert(is_read || is_write);
+
+        char* filename_abspath = canonicalize_path(tcp->opened_filename, tcp->current_dir);
+        assert(filename_abspath);
+        if (is_read) {
+          printf("%u READ %s\n", tcp->pid, filename_abspath);
+        }
+        if (is_write) {
+          printf("%u WRITE %s\n", tcp->pid, filename_abspath);
+        }
+        free(filename_abspath);
+      }
+    }
+
     if (((success_type == 0) && (tcp->u_rval == 0)) ||
         ((success_type == 1) && (tcp->u_rval >= 0))) {
       copy_file_into_cde_root(tcp->opened_filename, tcp->current_dir);
@@ -2565,6 +2600,11 @@ void CDE_init_tcb_dir_fields(struct tcb* tcp) {
     assert(tcp->parent->current_dir);
     strcpy(tcp->current_dir, tcp->parent->current_dir);
     //printf("inherited %s [%d]\n", tcp->current_dir, tcp->pid);
+
+    // TODO: I don't know whether this covers all the cases of process forking ...
+    if (CDE_provenance_mode) {
+      printf("%u SPAWN %u\n", tcp->parent->pid, tcp->pid);
+    }
   }
   else {
     // otherwise create fresh fields derived from master (cde) process
