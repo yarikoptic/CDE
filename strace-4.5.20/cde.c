@@ -1003,10 +1003,10 @@ void CDE_end_standard_fileop(struct tcb* tcp, const char* syscall_name,
         char* filename_abspath = canonicalize_path(tcp->opened_filename, tcp->current_dir);
         assert(filename_abspath);
         if (is_read) {
-          printf("%u READ %s\n", tcp->pid, filename_abspath);
+          printf("PROVENANCE: %u READ %s\n", tcp->pid, filename_abspath);
         }
         if (is_write) {
-          printf("%u WRITE %s\n", tcp->pid, filename_abspath);
+          printf("PROVENANCE: %u WRITE %s\n", tcp->pid, filename_abspath);
         }
         free(filename_abspath);
       }
@@ -2603,7 +2603,7 @@ void CDE_init_tcb_dir_fields(struct tcb* tcp) {
 
     // TODO: I don't know whether this covers all the cases of process forking ...
     if (CDE_provenance_mode) {
-      printf("%u SPAWN %u\n", tcp->parent->pid, tcp->pid);
+      printf("PROVENANCE: %u SPAWN %u\n", tcp->parent->pid, tcp->pid);
     }
   }
   else {
