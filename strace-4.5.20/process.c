@@ -254,6 +254,7 @@ extern void CDE_begin_execve(struct tcb* tcp);
 extern void CDE_end_execve(struct tcb* tcp);
 
 extern void CDE_init_tcb_dir_fields(struct tcb* tcp);
+extern char CDE_provenance_mode;
 
 //extern void CDE_end_uname(struct tcb* tcp);
 
@@ -442,11 +443,18 @@ struct tcb *tcp;
 		fprintf(stderr, "_exit returned!\n");
 		return -1;
 	}
-	/* special case: we stop tracing this process, finish line now */
-	tprintf("%ld) ", tcp->u_arg[0]);
-	tabto(acolumn);
-	tprintf("= ?");
-	printtrailer();
+
+  // pgbovine - implement special behavior for provenance mode
+	///* special case: we stop tracing this process, finish line now */
+	//tprintf("%ld) ", tcp->u_arg[0]);
+	//tabto(acolumn);
+	//tprintf("= ?");
+	//printtrailer();
+
+  if (CDE_provenance_mode) {
+    printf("PROVENANCE: %d %u EXIT\n", time(0), tcp->pid);
+  }
+	tcp_last = NULL; // swipe relevant code taken from printtrailer() to prevent errors
 	return 0;
 }
 
