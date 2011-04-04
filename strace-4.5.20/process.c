@@ -452,7 +452,8 @@ struct tcb *tcp;
 	//printtrailer();
 
   if (CDE_provenance_mode) {
-    printf("PROVENANCE: %d %u EXIT\n", time(0), tcp->pid);
+    extern FILE* CDE_provenance_logfile;
+    fprintf(CDE_provenance_logfile, "%d %u EXIT\n", time(0), tcp->pid);
   }
 	tcp_last = NULL; // swipe relevant code taken from printtrailer() to prevent errors
 	return 0;

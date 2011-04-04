@@ -213,7 +213,7 @@ int exitval;
   }
 
   fprintf(ofp, "\nOptions\n");
-  fprintf(ofp, "  -p  : Provenance mode (output a provenance graph)\n");
+  fprintf(ofp, "  -p  : Provenance mode (output a provenance.log file)\n");
   fprintf(ofp, "  -v  : Verbose mode (for debugging)\n");
 
   /*
@@ -1032,6 +1032,9 @@ main(int argc, char *argv[])
 		case 'p':
       // pgbovine - hijack for the '-p' option
       CDE_provenance_mode = 1;
+      extern FILE* CDE_provenance_logfile;
+      CDE_provenance_logfile = fopen("provenance.log", "w");
+
       /*
 			if ((pid = atoi(optarg)) <= 0) {
 				fprintf(stderr, "%s: Invalid process id: %s\n",

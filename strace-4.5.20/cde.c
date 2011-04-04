@@ -61,6 +61,8 @@ char CDE_exec_mode;
 char CDE_provenance_mode = 0; // -p option
 char CDE_verbose_mode = 0; // -v option
 
+FILE* CDE_provenance_logfile = NULL; // only valid if -p option is used
+
 static char cde_options_initialized = 0; // set to 1 after CDE_init_options() done
 
 static void begin_setup_shmat(struct tcb* tcp);
@@ -1005,10 +1007,10 @@ void CDE_end_standard_fileop(struct tcb* tcp, const char* syscall_name,
         char* filename_abspath = canonicalize_path(tcp->opened_filename, tcp->current_dir);
         assert(filename_abspath);
         if (is_read) {
-          printf("PROVENANCE: %d %u READ %s\n", time(0), tcp->pid, filename_abspath);
+          fprintf(CDE_provenance_logfile, "%d %u READ %s\n", time(0), tcp->pid, filename_abspath);
         }
         if (is_write) {
-          printf("PROVENANCE: %d %u WRITE %s\n", time(0), tcp->pid, filename_abspath);
+          fprintf(CDE_provenance_logfile, "%d %u WRITE %s\n", time(0), tcp->pid, filename_abspath);
         }
         free(filename_abspath);
       }
@@ -1641,7 +1643,7 @@ void CDE_end_execve(struct tcb* tcp) {
       if (CDE_provenance_mode) {
         char* filename_abspath = canonicalize_path(tcp->opened_filename, tcp->current_dir);
         assert(filename_abspath);
-        printf("PROVENANCE: %d %u EXECVE %s\n", time(0), tcp->pid, filename_abspath);
+        fprintf(CDE_provenance_logfile, "%d %u EXECVE %s\n", time(0), tcp->pid, filename_abspath);
         free(filename_abspath);
       }
 
@@ -2613,7 +2615,7 @@ void CDE_init_tcb_dir_fields(struct tcb* tcp) {
 
     // TODO: I don't know whether this covers all the cases of process forking ...
     if (CDE_provenance_mode) {
-      printf("PROVENANCE: %d %u SPAWN %u\n", time(0), tcp->parent->pid, tcp->pid);
+      fprintf(CDE_provenance_logfile, "%d %u SPAWN %u\n", time(0), tcp->parent->pid, tcp->pid);
     }
   }
   else {
