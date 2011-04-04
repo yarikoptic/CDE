@@ -988,30 +988,21 @@ void CDE_end_standard_fileop(struct tcb* tcp, const char* syscall_name,
       // only track open syscalls
       if ((success_type == 1) && (tcp->u_rval >= 0) &&
           strcmp(syscall_name, "sys_open") == 0) {
-        // Note: tcp->u_arg[1] is only for open(), not openat()
-        unsigned char open_mode = (tcp->u_arg[1] & 3);
-        char is_read = 0;
-        char is_write = 0;
-        if (open_mode == O_RDONLY) {
-          is_read = 1;
-        }
-        else if (open_mode == O_WRONLY) {
-          is_write = 1;
-        }
-        else if (open_mode == O_RDWR) {
-          is_read = 1;
-          is_write = 1;
-        }
-        assert(is_read || is_write);
-
         char* filename_abspath = canonicalize_path(tcp->opened_filename, tcp->current_dir);
         assert(filename_abspath);
-        if (is_read) {
+
+        // Note: tcp->u_arg[1] is only for open(), not openat()
+        unsigned char open_mode = (tcp->u_arg[1] & 3);
+        if (open_mode == O_RDONLY) {
           fprintf(CDE_provenance_logfile, "%d %u READ %s\n", time(0), tcp->pid, filename_abspath);
         }
-        if (is_write) {
+        else if (open_mode == O_WRONLY) {
           fprintf(CDE_provenance_logfile, "%d %u WRITE %s\n", time(0), tcp->pid, filename_abspath);
         }
+        else if (open_mode == O_RDWR) {
+          fprintf(CDE_provenance_logfile, "%d %u READ-WRITE %s\n", time(0), tcp->pid, filename_abspath);
+        }
+
         free(filename_abspath);
       }
     }
