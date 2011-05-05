@@ -60,8 +60,10 @@ char CDE_exec_mode;
 
 char CDE_provenance_mode = 0; // -p option
 char CDE_verbose_mode = 0; // -v option
+char CDE_copied_files_log_mode = 0; // -l option
 
 FILE* CDE_provenance_logfile = NULL; // only valid if -p option is used
+FILE* CDE_copiedfiles_logfile = NULL; // only valid if -l option is used
 
 static char cde_options_initialized = 0; // set to 1 after CDE_init_options() done
 
@@ -350,6 +352,10 @@ static void copy_file_into_cde_root(char* filename, char* child_current_pwd) {
   if (ignore_path(filename_abspath)) {
     free(filename_abspath);
     return;
+  }
+
+  if (CDE_copied_files_log_mode) {
+    fprintf(CDE_copiedfiles_logfile, "%s\n", filename_abspath);
   }
 
   char* dst_path = prepend_cderoot(filename_abspath);

@@ -95,6 +95,7 @@ extern char *optarg;
 extern char CDE_exec_mode;
 extern char CDE_provenance_mode; // -p option
 extern char CDE_verbose_mode; // -v option
+extern char CDE_copied_files_log_mode; // -l option
 extern void alloc_tcb_CDE_fields(struct tcb* tcp);
 extern void free_tcb_CDE_fields(struct tcb* tcp);
 extern void copy_file(char* src_filename, char* dst_filename);
@@ -214,6 +215,7 @@ int exitval;
 
   fprintf(ofp, "\nOptions\n");
   fprintf(ofp, "  -p  : Provenance mode (output a provenance.log file)\n");
+  fprintf(ofp, "  -l  : Log all copied files mode (output copied-files.log)\n");
   fprintf(ofp, "  -v  : Verbose mode (for debugging)\n");
 
   /*
@@ -934,7 +936,7 @@ main(int argc, char *argv[])
 	qualify("verbose=all");
 	qualify("signal=all");
 	while ((c = getopt(argc, argv,
-		"+cCdfFhqrtTvVxzp"
+		"+cCdfFhqrtTvVxzpl"
 #ifndef USE_PROCFS
 		"D"
 #endif
@@ -1029,6 +1031,12 @@ main(int argc, char *argv[])
 		case 'O':
 			set_overhead(atoi(optarg));
 			break;
+		case 'l':
+      // pgbovine - hijack for the '-l' option
+      CDE_copied_files_log_mode = 1;
+      extern FILE* CDE_copiedfiles_logfile;
+      CDE_copiedfiles_logfile = fopen("copied-files.log", "w");
+      break;
 		case 'p':
       // pgbovine - hijack for the '-p' option
       CDE_provenance_mode = 1;
