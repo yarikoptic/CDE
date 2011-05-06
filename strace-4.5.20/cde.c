@@ -2885,6 +2885,11 @@ void CDE_init_options() {
     assert(*cde_pseudo_root_dir);
     char* options_file = format("%s/../cde.options", cde_pseudo_root_dir);
     f = fopen(options_file, "r");
+    if (!f) {
+      fprintf(stderr, "Fatal error: missing cde.options file\n");
+      fprintf(stderr, "(trying to locate file at %s)\n", options_file);
+      exit(1);
+    }
     free(options_file);
   }
   else {
@@ -2895,13 +2900,11 @@ void CDE_init_options() {
     if (f) {
       copy_file("cde.options", CDE_PACKAGE_DIR "/cde.options");
     }
+    else {
+      fprintf(stderr, "Fatal error: missing cde.options file\n");
+      exit(1);
+    }
   }
-
-  if (!f) {
-    fprintf(stderr, "Fatal error: missing cde.options file\n");
-    exit(1);
-  }
-
 
   char is_first_line = 1;
 
