@@ -154,18 +154,22 @@ static char* extract_sandboxed_pwd(char* real_pwd) {
     return real_pwd;
   }
 
-  // only do this sanity check if we're NOT running in the special
-  // cde_exec_from_outside_cderoot mode ...
-  if (!cde_exec_from_outside_cderoot) {
-    // sanity check, make sure real_pwd is within/ cde_pseudo_root_dir,
-    // if we're not ignoring it
-    if (!real_pwd_is_within_cde_pseudo_root_dir) {
+  // sanity check, make sure real_pwd is within/ cde_pseudo_root_dir,
+  // if we're not ignoring it
+  if (!real_pwd_is_within_cde_pseudo_root_dir) {
+    // if we're in this mode, then we're okay!!!  don't return an error!
+    if (cde_exec_from_outside_cderoot) {
+      return real_pwd;
+    }
+    else {
       fprintf(stderr,
               "Fatal error: '%s' is outside of cde-root/ and NOT being ignored.\n",
               real_pwd);
       exit(1);
     }
   }
+
+  // regular action: truncate path up to and including 'cde-root/'
 
   char* sandboxed_pwd = (real_pwd + cde_pseudo_root_dir_len);
 
