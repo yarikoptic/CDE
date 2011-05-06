@@ -255,8 +255,7 @@ static void make_mirror_dirs_in_cde_package(char* original_abspath, int pop_one)
 }
 
 
-// does simple string comparisons.  (e.g., if you want to compare
-// with absolute paths, then filename had better be an absolute path!)
+// does simple string comparisons on ABSOLUTE PATHS.
 static int ignore_path(char* filename) {
   assert(cde_options_initialized);
 
@@ -265,6 +264,8 @@ static int ignore_path(char* filename) {
   if (filename[0] == '\0') {
     return 1;
   }
+
+  assert(IS_ABSPATH(filename));
 
   int i;
 
@@ -1198,12 +1199,14 @@ void CDE_begin_execve(struct tcb* tcp) {
     // ignoring "/bin/bash" to prevent crashes on certain Ubuntu
     // machines), then DO NOT use the ld-linux trick and simply
     // execve the file normally
-    //
-    // TODO: pass in an ABSOLUTE PATH to ignore_path for more
-    //       robust behavior
-    if (ignore_path(tcp->opened_filename)) {
+    char* opened_filename_abspath =
+      canonicalize_path(tcp->opened_filename, extract_sandboxed_pwd(tcp->current_dir));
+
+    if (ignore_path(opened_filename_abspath)) {
+      free(opened_filename_abspath);
       return;
     }
+    free(opened_filename_abspath);
 
     redirected_path = redirect_filename_into_cderoot(tcp->opened_filename, tcp->current_dir);
   }
