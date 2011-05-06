@@ -62,6 +62,9 @@ char CDE_provenance_mode = 0; // -p option
 char CDE_verbose_mode = 0; // -v option
 char CDE_copied_files_log_mode = 0; // -l option
 
+// only 1 if we are running cde-exec from OUTSIDE of a cde-root/ directory
+char cde_exec_from_outside_cderoot = 0;
+
 FILE* CDE_provenance_logfile = NULL; // only valid if -p option is used
 FILE* CDE_copiedfiles_logfile = NULL; // only valid if -l option is used
 
@@ -151,13 +154,17 @@ static char* extract_sandboxed_pwd(char* real_pwd) {
     return real_pwd;
   }
 
-  // sanity check, make sure real_pwd is within/ cde_pseudo_root_dir,
-  // if we're not ignoring it
-  if (!real_pwd_is_within_cde_pseudo_root_dir) {
-    fprintf(stderr,
-            "Fatal error: '%s' is outside of cde-root/ and NOT being ignored.\n",
-            real_pwd);
-    exit(1);
+  // only do this sanity check if we're NOT running in the special
+  // cde_exec_from_outside_cderoot mode ...
+  if (!cde_exec_from_outside_cderoot) {
+    // sanity check, make sure real_pwd is within/ cde_pseudo_root_dir,
+    // if we're not ignoring it
+    if (!real_pwd_is_within_cde_pseudo_root_dir) {
+      fprintf(stderr,
+              "Fatal error: '%s' is outside of cde-root/ and NOT being ignored.\n",
+              real_pwd);
+      exit(1);
+    }
   }
 
   char* sandboxed_pwd = (real_pwd + cde_pseudo_root_dir_len);
@@ -306,11 +313,30 @@ static int ignore_path(char* filename) {
   }
 
 
-  // do NOT ignore by default.  if you want to ignore everything except
-  // for what's explicitly specified by 'redirect' directives, then
-  // use an option like "ignore_prefix=/" (to ignore everything) and
-  // then add redirect_prefix= and redirect_exact= directives accordingly
-  return 0;
+  if (cde_exec_from_outside_cderoot) {
+    // if we're running cde-exec from OUTSIDE of cde-root/, then adopt a
+    // 'Union FS' like policy where if a version of the file exists
+    // within cde-package/cde-root/, then use it (return 0 to NOT
+    // ignore), otherwise try using the version in the real system
+    // directory (return 1 to ignore)
+    struct stat tmp_statbuf;
+    char* redirected_filename = create_abspath_within_cderoot(filename);
+    if (stat(redirected_filename, &tmp_statbuf) == 0) {
+      free(redirected_filename);
+      return 0;
+    }
+    else {
+      free(redirected_filename);
+      return 1;
+    }
+  }
+  else {
+    // do NOT ignore by default.  if you want to ignore everything except
+    // for what's explicitly specified by 'redirect' directives, then
+    // use an option like "ignore_prefix=/" (to ignore everything) and
+    // then add redirect_prefix= and redirect_exact= directives accordingly
+    return 0;
+  }
 }
 
 
@@ -2687,6 +2713,8 @@ void CDE_init_pseudo_root_dir() {
     strcpy(cde_pseudo_root_dir, toplevel_cde_root_path);
 
     free(toplevel_cde_root_path);
+
+    cde_exec_from_outside_cderoot = 1;
   }
   else {
     // normal case --- we're currently within a cde-root/ directory, so
