@@ -48,6 +48,10 @@ try:
   #print stdout2
 
   #assert first_run_stdout == stdout2
+  #print '=== first_run_stderr:'
+  #print first_run_stderr
+  #print '=== stderr2:'
+  #print stderr2
   assert first_run_stderr == stderr2
 
   os.chdir(full_pwd) # make sure to chdir back!!!

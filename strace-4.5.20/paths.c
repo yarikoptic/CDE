@@ -52,8 +52,6 @@ static struct path* new_path(char is_abspath);
 //
 // mallocs a new string
 char* realpath_strdup(char* filename) {
-  assert(!CDE_exec_mode);
-  
   char path[MAXPATHLEN];
   path[0] = '\0';
   char* ret = realpath(filename, path);

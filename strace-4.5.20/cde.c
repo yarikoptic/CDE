@@ -1517,8 +1517,10 @@ void CDE_begin_execve(struct tcb* tcp) {
          let's set up the shared memory segment (tcp->localshm) like so:
 
     base -->       tcp->localshm : "cde-root/lib/ld-linux.so.2" (ld_linux_fullpath)
+    real_program_path_base -->   : path to target program binary, after following ALL symlinks
     new_argv -->   argv pointers : point to tcp->childshm ("cde-root/lib/ld-linux.so.2")
-                   argv pointers : point to tcp->u_arg[0] (original program name)
+                   argv pointers : point to tcp->childshm + strlen(ld_linux_fullpath),
+                                   which is real_program_path_base in the CHILD's address space
                    argv pointers : point to child program's argv[1]
                    argv pointers : point to child program's argv[2]
                    argv pointers : point to child program's argv[3]
@@ -1529,18 +1531,88 @@ void CDE_begin_execve(struct tcb* tcp) {
 
       char* base = (char*)tcp->localshm;
       strcpy(base, ld_linux_fullpath);
-      int offset = strlen(ld_linux_fullpath) + 1;
-      char** new_argv = (char**)(base + offset);
+      int offset1 = strlen(ld_linux_fullpath) + 1;
+
+      tcp->perceived_program_fullpath = strcpy_from_child(tcp, tcp->u_arg[0]);
+
+      /* NOTE: we now only do this hack for 'java', since that seems to
+         be the only known program that requires it (to the best of my
+         knowledge).  i don't want to implement this hack for all
+         programs since there are programs like 'ccache' and 'ccrypt'
+         that NEED to use the original names for the program files
+         (which are themselves symlinks) rather than the names resulting
+         from following all symlinks.
+        
+         ok, this is super super super gross, but what we need to do is
+         to set tcp->perceived_program_fullpath to the full path to the
+         actual file of the target program's binary, making sure to first
+         follow ALL symlinks.  otherwise programs like 'java' will fail
+         since they rely on the absolute path.
+
+         e.g., try invoking 'java' explicitly with the dynamic linker,
+         and it will fail since /usr/bin/java is a symlink and not the
+         path to the true binary.  'java' actually inspects the path to
+         the binary in order to dynamically generate paths to libraries
+         that it needs to load at start-up time ... gross!  e.g.,:
+
+         $ /lib/ld-linux.so.2 /usr/bin/java
+         /usr/bin/java: error while loading shared libraries: libjli.so: cannot open shared object file: No such file or directory
+
+         This fails because it cannot find libjli.so on a search path
+         based on /usr/bin/java.
+
+         Since cde-exec starts up a target program by explicitly
+         invoking the dynamic linker, it will face the same failure ...
+         unless we pass in the absolute path to the REAL binary (not a
+         symlink) to the dynamic linker.  we will do so by:
+
+         1.) Getting the original path (tcp->u_arg[0])
+         2.) Creating a version inside of cde-root/
+         3.) Calling realpath() on that path in order to follow
+             and resolve all symlinks
+         4.) Calling extract_sandboxed_pwd() in order to get
+             the version of that path back *outside* of cde-root/
+
+       */
+      if (strcmp(basename(tcp->perceived_program_fullpath), "java") == 0) {
+
+        // create a path WITHIN cde-root, so that we can call realpath on it.
+        // (otherwise this path might not exist natively on the target machine!)
+        char* program_full_path_in_cderoot =
+          redirect_filename_into_cderoot(tcp->perceived_program_fullpath, tcp->current_dir);
+
+        if (program_full_path_in_cderoot) {
+          // realpath follows ALL symbolic links and returns the path to the TRUE binary file :)
+          char* program_realpath_in_cde_root = realpath_strdup(program_full_path_in_cderoot);
+          if (program_realpath_in_cde_root) {
+            // extract_sandboxed_pwd (perhaps badly named for this scenario)
+            // extracts the part of program_realpath_in_cde_root that comes AFTER cde-root/
+            // (note that extract_sandboxed_pwd does NOT malloc a new string)
+            char* tmp_old = tcp->perceived_program_fullpath;
+            tcp->perceived_program_fullpath = strdup(extract_sandboxed_pwd(program_realpath_in_cde_root));
+            free(tmp_old);
+
+            free(program_realpath_in_cde_root);
+          }
+          free(program_full_path_in_cderoot);
+        }
+      }
+
+
+      char** real_program_path_base = (char**)(base + offset1);
+      strcpy(real_program_path_base, tcp->perceived_program_fullpath);
+
+      int offset2 = strlen(tcp->perceived_program_fullpath) + 1;
+
+      char** new_argv = (char**)(base + offset1 + offset2);
 
       // really subtle, these addresses should be in the CHILD's address space,
       // not the parent's
 
       // points to ld_linux_fullpath
       new_argv[0] = (char*)tcp->childshm;
-      // points to original program name (full path)
-      new_argv[1] = (char*)tcp->u_arg[0];
-
-      tcp->perceived_program_fullpath = strcpy_from_child(tcp, tcp->u_arg[0]);
+      // points to the full path to the target program, after following ALL symlinks:
+      new_argv[1] = (char*)tcp->childshm + offset1;
 
       // now populate argv[1:] directly from child's original space
       // (original arguments)
@@ -1580,10 +1652,10 @@ void CDE_begin_execve(struct tcb* tcp) {
 
 #if defined (I386)
       cur_regs.ebx = (long)tcp->childshm;            // location of base
-      cur_regs.ecx = ((long)tcp->childshm) + offset; // location of new_argv
+      cur_regs.ecx = ((long)tcp->childshm) + offset1 + offset2; // location of new_argv
 #elif defined(X86_64)
       cur_regs.rdi = (long)tcp->childshm;
-      cur_regs.rsi = ((long)tcp->childshm) + offset;
+      cur_regs.rsi = ((long)tcp->childshm) + offset1 + offset2;
 #else
   #error "Unknown architecture (not I386 or X86_64)"
 #endif
