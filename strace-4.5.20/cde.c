@@ -1517,7 +1517,7 @@ void CDE_begin_execve(struct tcb* tcp) {
          let's set up the shared memory segment (tcp->localshm) like so:
 
     base -->       tcp->localshm : "cde-root/lib/ld-linux.so.2" (ld_linux_fullpath)
-    real_program_path_base -->   : path to target program binary, after following ALL symlinks
+    real_program_path_base -->   : path to target program's binary
     new_argv -->   argv pointers : point to tcp->childshm ("cde-root/lib/ld-linux.so.2")
                    argv pointers : point to tcp->childshm + strlen(ld_linux_fullpath),
                                    which is real_program_path_base in the CHILD's address space
@@ -1611,7 +1611,7 @@ void CDE_begin_execve(struct tcb* tcp) {
 
       // points to ld_linux_fullpath
       new_argv[0] = (char*)tcp->childshm;
-      // points to the full path to the target program, after following ALL symlinks:
+      // points to the full path to the target program (real_program_path_base)
       new_argv[1] = (char*)tcp->childshm + offset1;
 
       // now populate argv[1:] directly from child's original space
