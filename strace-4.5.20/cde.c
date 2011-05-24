@@ -62,8 +62,13 @@ char CDE_provenance_mode = 0; // -p option
 char CDE_verbose_mode = 0; // -v option
 
 // 1 if we should use the dynamic linker from within the package
-// (allows for greater portability but execution might be more crash-prone)
-char CDE_use_linker_from_package = 0; // -l option
+//   (much more portable, but might be less robust since the dynamic linker
+//   must be invoked explicitly, which leads to some weird-ass bugs)
+// 0 if we should attempt to use the native dynamic linker from target machine
+//   (not portable at all since the target machine's dynamic linker must
+//   match the libc version WITHIN the package, but potentially more
+//   robust if the target and source machines are identically-configured)
+char CDE_use_linker_from_package = 1; // ON by default, -l option to turn OFF
 
 // only 1 if we are running cde-exec from OUTSIDE of a cde-root/ directory
 char cde_exec_from_outside_cderoot = 0;
@@ -1439,7 +1444,7 @@ void CDE_begin_execve(struct tcb* tcp) {
       char* base = (char*)tcp->localshm;
       int ld_linux_offset = 0;
 
-      if (CDE_use_linker_from_package) { // avoid dynamic linker craziness unless explicitly enabled!
+      if (CDE_use_linker_from_package) {
         strcpy(base, ld_linux_fullpath);
         ld_linux_offset = strlen(ld_linux_fullpath) + 1;
       }
@@ -1703,7 +1708,7 @@ void CDE_begin_execve(struct tcb* tcp) {
       */
 
       
-      if (CDE_use_linker_from_package) { // avoid dynamic linker craziness unless explicitly enabled!
+      if (CDE_use_linker_from_package) {
         // now set ebx to the new program name and ecx to the new argv array
         // to alter the arguments of the execv system call :0
         struct user_regs_struct cur_regs;

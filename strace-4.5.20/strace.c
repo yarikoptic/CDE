@@ -95,7 +95,7 @@ extern char *optarg;
 extern char CDE_exec_mode;
 extern char CDE_provenance_mode; // -p option
 extern char CDE_verbose_mode; // -v option
-extern char CDE_use_linker_from_package; // -l option
+extern char CDE_use_linker_from_package; // ON by default, -l option to turn OFF
 extern void alloc_tcb_CDE_fields(struct tcb* tcp);
 extern void free_tcb_CDE_fields(struct tcb* tcp);
 extern void copy_file(char* src_filename, char* dst_filename);
@@ -214,7 +214,7 @@ int exitval;
   }
 
   fprintf(ofp, "\nOptions\n");
-  fprintf(ofp, "  -l  : Use dynamic linker from package (more portable but less robust)\n");
+  fprintf(ofp, "  -l  : Use native dynamic linker on machine (less portable but more robust)\n");
   fprintf(ofp, "  -p  : Provenance mode (output a provenance.log file)\n");
   fprintf(ofp, "  -v  : Verbose mode (for debugging)\n");
 
@@ -1033,7 +1033,7 @@ main(int argc, char *argv[])
 			break;
 		case 'l':
       // pgbovine - hijack for the '-l' option
-      CDE_use_linker_from_package = 1;
+      CDE_use_linker_from_package = 0;
       break;
 		case 'p':
       // pgbovine - hijack for the '-p' option
