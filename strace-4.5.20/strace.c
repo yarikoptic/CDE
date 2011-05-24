@@ -95,7 +95,7 @@ extern char *optarg;
 extern char CDE_exec_mode;
 extern char CDE_provenance_mode; // -p option
 extern char CDE_verbose_mode; // -v option
-extern char CDE_copied_files_log_mode; // -l option
+extern char CDE_use_linker_from_package; // -l option
 extern void alloc_tcb_CDE_fields(struct tcb* tcp);
 extern void free_tcb_CDE_fields(struct tcb* tcp);
 extern void copy_file(char* src_filename, char* dst_filename);
@@ -201,21 +201,21 @@ int exitval;
   if (CDE_exec_mode) {
     fprintf(ofp,
             "CDE: Code, Data, and Environment packaging for Linux\n"
-            "Copyright 2010 Philip Guo (pg@cs.stanford.edu)\n"
+            "Copyright 2010-2011 Philip Guo (pg@cs.stanford.edu)\n"
             "http://www.stanford.edu/~pgbovine/cde.html\n\n"
             "usage: cde-exec [command within cde-root/ to run]\n");
   }
   else {
     fprintf(ofp,
             "CDE: Code, Data, and Environment packaging for Linux\n"
-            "Copyright 2010 Philip Guo (pg@cs.stanford.edu)\n"
+            "Copyright 2010-2011 Philip Guo (pg@cs.stanford.edu)\n"
             "http://www.stanford.edu/~pgbovine/cde.html\n\n"
             "usage: cde [command to run and package]\n");
   }
 
   fprintf(ofp, "\nOptions\n");
+  fprintf(ofp, "  -l  : Use dynamic linker from package (more portable but less robust)\n");
   fprintf(ofp, "  -p  : Provenance mode (output a provenance.log file)\n");
-  fprintf(ofp, "  -l  : Log all copied files mode (output copied-files.log)\n");
   fprintf(ofp, "  -v  : Verbose mode (for debugging)\n");
 
   /*
@@ -1033,9 +1033,7 @@ main(int argc, char *argv[])
 			break;
 		case 'l':
       // pgbovine - hijack for the '-l' option
-      CDE_copied_files_log_mode = 1;
-      extern FILE* CDE_copiedfiles_logfile;
-      CDE_copiedfiles_logfile = fopen("copied-files.log", "w");
+      CDE_use_linker_from_package = 1;
       break;
 		case 'p':
       // pgbovine - hijack for the '-p' option

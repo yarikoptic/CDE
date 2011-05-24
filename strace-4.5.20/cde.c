@@ -60,13 +60,15 @@ char CDE_exec_mode;
 
 char CDE_provenance_mode = 0; // -p option
 char CDE_verbose_mode = 0; // -v option
-char CDE_copied_files_log_mode = 0; // -l option
+
+// 1 if we should use the dynamic linker from within the package
+// (allows for greater portability but execution might be more crash-prone)
+char CDE_use_linker_from_package = 0; // -l option
 
 // only 1 if we are running cde-exec from OUTSIDE of a cde-root/ directory
 char cde_exec_from_outside_cderoot = 0;
 
 FILE* CDE_provenance_logfile = NULL; // only valid if -p option is used
-FILE* CDE_copiedfiles_logfile = NULL; // only valid if -l option is used
 
 static char cde_options_initialized = 0; // set to 1 after CDE_init_options() done
 
@@ -383,10 +385,6 @@ static void copy_file_into_cde_root(char* filename, char* child_current_pwd) {
   if (ignore_path(filename_abspath)) {
     free(filename_abspath);
     return;
-  }
-
-  if (CDE_copied_files_log_mode) {
-    fprintf(CDE_copiedfiles_logfile, "%s\n", filename_abspath);
   }
 
   char* dst_path = prepend_cderoot(filename_abspath);
