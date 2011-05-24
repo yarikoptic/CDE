@@ -51,7 +51,11 @@ def run_and_cmp_cde_exec(argv, prev_stdout, prev_stderr):
       # run the cde-exec test in tmp_test_dir
       os.chdir(tmp_test_dir)
       (stdout, stderr) = Popen([CDE_EXEC] + argv, stdout=PIPE, stderr=PIPE).communicate()
+      #print '=== prev_stdout:', prev_stdout
+      #print '=== stdout:', stdout
       assert stdout == prev_stdout
+      #print '=== prev_stderr:', prev_stderr
+      #print '=== stderr:', stderr
       assert stderr == prev_stderr
 
     finally:

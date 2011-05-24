@@ -1396,6 +1396,8 @@ void CDE_begin_execve(struct tcb* tcp) {
       /*  we're running a script with a shebang (#!), so
           let's set up the shared memory segment (tcp->localshm) like so:
 
+    if (CDE_use_linker_from_package) {
+
     base -->       tcp->localshm : "cde-root/lib/ld-linux.so.2" (ld_linux_fullpath)
           script_command token 0 : "/usr/bin/env"
           script_command token 1 : "python"
@@ -1411,16 +1413,39 @@ void CDE_begin_execve(struct tcb* tcp) {
                    argv pointers : [...]
                    argv pointers : NULL
 
+    }
+    else {
+
+    base --> script_command token 0 REDIRECTED into cde-root:
+                   e.g., "/home/pgbovine/cde-package/cde-root/usr/bin/env"
+             script_command token 1 : "python"
+              ... (for as many tokens as available) ...
+    new_argv -->   argv pointers : point to script_command token 0
+                   argv pointers : point to script_command token 1
+              ... (for as many tokens as available) ...
+                   argv pointers : point to tcp->u_arg[0] (original program name)
+                   argv pointers : point to child program's argv[1]
+                   argv pointers : point to child program's argv[2]
+                   argv pointers : point to child program's argv[3]
+                   argv pointers : [...]
+                   argv pointers : NULL
+
+    }
+
         Note that we only need to do this if we're in CDE_exec_mode */
 
       //printf("script_command='%s', path_to_executable='%s'\n", script_command, path_to_executable);
 
       char* base = (char*)tcp->localshm;
-      strcpy(base, ld_linux_fullpath);
-      int ld_linux_offset = strlen(ld_linux_fullpath) + 1;
+      int ld_linux_offset = 0;
+
+      if (CDE_use_linker_from_package) { // avoid dynamic linker craziness unless explicitly enabled!
+        strcpy(base, ld_linux_fullpath);
+        ld_linux_offset = strlen(ld_linux_fullpath) + 1;
+      }
 
       char* cur_loc = (char*)(base + ld_linux_offset);
-      char* script_command_token_starts[30]; // stores starting locations of each token
+      char* script_command_token_starts[200]; // stores starting locations of each token
 
       int script_command_num_tokens = 0;
 
@@ -1437,6 +1462,24 @@ void CDE_begin_execve(struct tcb* tcp) {
         // set to the first token!
         if (!tcp->perceived_program_fullpath) {
           tcp->perceived_program_fullpath = strdup(p);
+
+          // kludgy special-case handling for !CDE_use_linker_from_package mode
+          //
+          // set the first script_command token to a string that's
+          // redirected INSIDE of cde-root ...
+          if (!CDE_use_linker_from_package) {
+            char* program_full_path_in_cderoot =
+              redirect_filename_into_cderoot(tcp->perceived_program_fullpath, tcp->current_dir);
+
+            strcpy(cur_loc, program_full_path_in_cderoot);
+            script_command_token_starts[script_command_num_tokens] = cur_loc;
+            cur_loc += (strlen(program_full_path_in_cderoot) + 1);
+            script_command_num_tokens++;
+
+            free(program_full_path_in_cderoot);
+
+            continue;
+          }
         }
 
         strcpy(cur_loc, p);
@@ -1457,20 +1500,35 @@ void CDE_begin_execve(struct tcb* tcp) {
       // points to all the tokens of script_command
       int i;
       for (i = 0; i < script_command_num_tokens; i++) {
-        new_argv[i+1] = (char*)tcp->childshm + (script_command_token_starts[i] - base);
+        // ugly subtle indexing differences between modes :/
+        if (CDE_use_linker_from_package) {
+          new_argv[i+1] = (char*)tcp->childshm + (script_command_token_starts[i] - base);
+        }
+        else {
+          new_argv[i] = (char*)tcp->childshm + (script_command_token_starts[i] - base);
+        }
+      }
+
+      // ugly subtle indexing differences between modes :/
+      int first_nontoken_index;
+      if (CDE_use_linker_from_package) {
+        first_nontoken_index = script_command_num_tokens + 1;
+      }
+      else {
+        first_nontoken_index = script_command_num_tokens;
       }
 
       // now populate the original program name from tcp->u_arg[0]
-      new_argv[script_command_num_tokens + 1] = (char*)tcp->u_arg[0];
+      new_argv[first_nontoken_index] = (char*)tcp->u_arg[0];
 
-      // now populate argv[script_command_num_tokens+1:] directly from child's original space
+      // now populate argv[first_nontoken_index:] directly from child's original space
       // (original arguments)
       char** child_argv = (char**)tcp->u_arg[1]; // in child's address space
       char* cur_arg = NULL;
       i = 1; // start at argv[1]
       while (1) {
         EXITIF(umovestr(tcp, (long)(child_argv + i), sizeof cur_arg, (void*)&cur_arg) < 0);
-        new_argv[i + script_command_num_tokens + 1] = cur_arg;
+        new_argv[i + first_nontoken_index] = cur_arg;
         if (cur_arg == NULL) {
           break;
         }
@@ -1525,7 +1583,8 @@ void CDE_begin_execve(struct tcb* tcp) {
                    argv pointers : [...]
                    argv pointers : NULL
 
-        Note that we only need to do this if we're in CDE_exec_mode */
+        Note that we only need to do this if we're in CDE_exec_mode
+        and CDE_use_linker_from_package is on */
 
       char* base = (char*)tcp->localshm;
       strcpy(base, ld_linux_fullpath);
@@ -1643,22 +1702,29 @@ void CDE_begin_execve(struct tcb* tcp) {
       }
       */
 
-      // now set ebx to the new program name and ecx to the new argv array
-      // to alter the arguments of the execv system call :0
-      struct user_regs_struct cur_regs;
-      EXITIF(ptrace(PTRACE_GETREGS, tcp->pid, NULL, (long)&cur_regs) < 0);
+      
+      if (CDE_use_linker_from_package) { // avoid dynamic linker craziness unless explicitly enabled!
+        // now set ebx to the new program name and ecx to the new argv array
+        // to alter the arguments of the execv system call :0
+        struct user_regs_struct cur_regs;
+        EXITIF(ptrace(PTRACE_GETREGS, tcp->pid, NULL, (long)&cur_regs) < 0);
 
 #if defined (I386)
-      cur_regs.ebx = (long)tcp->childshm;            // location of base
-      cur_regs.ecx = ((long)tcp->childshm) + offset1 + offset2; // location of new_argv
+        cur_regs.ebx = (long)tcp->childshm;            // location of base
+        cur_regs.ecx = ((long)tcp->childshm) + offset1 + offset2; // location of new_argv
 #elif defined(X86_64)
-      cur_regs.rdi = (long)tcp->childshm;
-      cur_regs.rsi = ((long)tcp->childshm) + offset1 + offset2;
+        cur_regs.rdi = (long)tcp->childshm;
+        cur_regs.rsi = ((long)tcp->childshm) + offset1 + offset2;
 #else
-  #error "Unknown architecture (not I386 or X86_64)"
+    #error "Unknown architecture (not I386 or X86_64)"
 #endif
 
-      ptrace(PTRACE_SETREGS, tcp->pid, NULL, (long)&cur_regs);
+        ptrace(PTRACE_SETREGS, tcp->pid, NULL, (long)&cur_regs);
+      }
+      else {
+        // simply redirect the executable's path to within $CDE_ROOT_DIR:
+        modify_syscall_single_arg(tcp, 1);
+      }
     }
 
     // if tcp->perceived_program_fullpath has been set, then it might be

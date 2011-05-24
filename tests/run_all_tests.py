@@ -4,6 +4,9 @@ import os
 from subprocess import *
 
 for e in os.listdir('.'):
+  if e == 'socket_test':
+    print "  Skipping socket_test/"
+    continue
   if os.path.isdir(e):
     if os.path.exists(os.path.join(e, 'testme.py')):
       os.chdir(e)
