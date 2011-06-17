@@ -101,6 +101,9 @@ int ignore_exact_paths_ind = 0;
 int ignore_prefix_paths_ind = 0;
 int ignore_substr_paths_ind = 0;
 
+static char* ignore_process_paths[100];
+int ignore_process_paths_ind = 0;
+
 // these override their ignore path counterparts
 static char* redirect_exact_paths[100];
 static char* redirect_prefix_paths[100];
@@ -602,6 +605,12 @@ static void modify_syscall_single_arg(struct tcb* tcp, int arg_num) {
   assert(CDE_exec_mode);
   assert(tcp->opened_filename);
 
+  // PUNT EARLY!!!
+  if (tcp->ignore_process) {
+    return;
+  }
+
+
   char* redirected_filename =
     redirect_filename_into_cderoot(tcp->opened_filename, tcp->current_dir);
   if (!redirected_filename) {
@@ -663,6 +672,12 @@ static void modify_syscall_single_arg(struct tcb* tcp, int arg_num) {
 // copy and paste from modify_syscall_first_arg ;)
 static void modify_syscall_two_args(struct tcb* tcp) {
   assert(CDE_exec_mode);
+
+  // PUNT EARLY!!!
+  if (tcp->ignore_process) {
+    return;
+  }
+
 
   if (!tcp->childshm) {
     begin_setup_shmat(tcp);
@@ -749,6 +764,12 @@ static void modify_syscall_two_args(struct tcb* tcp) {
 // really nasty copy-and-paste from modify_syscall_two_args above
 static void modify_syscall_second_and_fourth_args(struct tcb* tcp) {
   assert(CDE_exec_mode);
+
+  // PUNT EARLY!!!
+  if (tcp->ignore_process) {
+    return;
+  }
+
 
   if (!tcp->childshm) {
     begin_setup_shmat(tcp);
@@ -1232,6 +1253,11 @@ void CDE_begin_execve(struct tcb* tcp) {
     // ignoring "/bin/bash" to prevent crashes on certain Ubuntu
     // machines), then DO NOT use the ld-linux trick and simply
     // execve the file normally
+    //
+    // (note that this check doesn't pick up the case when a textual script
+    //  is being executed (e.g., with "#!/bin/bash" as its shebang line),
+    //  since tcp->opened_filename is the script's name and NOT "/bin/bash".
+    //  We will need to handle this case LATER in the function.)
     char* opened_filename_abspath =
       canonicalize_path(tcp->opened_filename, extract_sandboxed_pwd(tcp->current_dir));
 
@@ -1239,6 +1265,21 @@ void CDE_begin_execve(struct tcb* tcp) {
       free(opened_filename_abspath);
       return;
     }
+
+    // check for presence in ignore_process_paths, and set
+    // ignore_process accordingly
+    int i;
+    for (i = 0; i < ignore_process_paths_ind; i++) {
+      if (strcmp(opened_filename_abspath, ignore_process_paths[i]) == 0) {
+        tcp->ignore_process = 1;
+        // TODO: maybe output a status message
+
+        free(opened_filename_abspath);
+        return;
+      }
+    }
+ 
+
     free(opened_filename_abspath);
 
     redirected_path = redirect_filename_into_cderoot(tcp->opened_filename, tcp->current_dir);
@@ -1349,8 +1390,37 @@ void CDE_begin_execve(struct tcb* tcp) {
     // redirect the path inside CDE_ROOT_DIR:
     char* script_command_filename = NULL;
     if (CDE_exec_mode) {
+
+      // this path should look like the name in the #! line, just
+      // canonicalized to be an absolute path
+      char* script_command_abspath =
+        canonicalize_path(p, extract_sandboxed_pwd(tcp->current_dir));
+
+      if (ignore_path(script_command_abspath)) {
+        free(script_command_abspath);
+        free(tmp);
+        return; // PUNT!
+      }
+
+      // check for presence in ignore_process_paths, and set
+      // ignore_process accordingly
+      int i;
+      for (i = 0; i < ignore_process_paths_ind; i++) {
+        if (strcmp(script_command_abspath, ignore_process_paths[i]) == 0) {
+          tcp->ignore_process = 1;
+          // TODO: maybe output a status message
+
+          free(script_command_abspath);
+          free(tmp);
+          return; // PUNT!
+        }
+      }
+
+      free(script_command_abspath);
+
       script_command_filename = redirect_filename_into_cderoot(p, tcp->current_dir);
     }
+
 
     if (!script_command_filename) {
       script_command_filename = strdup(p);
@@ -2325,6 +2395,8 @@ void alloc_tcb_CDE_fields(struct tcb* tcp) {
   }
 
   tcp->current_dir = NULL;
+
+  tcp->ignore_process = 0;
 }
 
 void free_tcb_CDE_fields(struct tcb* tcp) {
@@ -2340,6 +2412,8 @@ void free_tcb_CDE_fields(struct tcb* tcp) {
     free(tcp->current_dir);
     tcp->current_dir = NULL;
   }
+
+  tcp->ignore_process = 0;
 }
 
 
@@ -2804,6 +2878,8 @@ void CDE_init_tcb_dir_fields(struct tcb* tcp) {
     // aliased, so don't mutate or free
     tcp->perceived_program_fullpath = tcp->parent->perceived_program_fullpath;
   }
+
+  tcp->ignore_process = 0; // NEVER inherit this from your parent
 }
 
 // find the absolute path to the cde-root/ directory, since that
@@ -2973,6 +3049,10 @@ void CDE_add_ignore_substr_path(char* p) {
   _add_to_array_internal(ignore_substr_paths, &ignore_substr_paths_ind, p, "ignore_substr_paths");
 }
 
+void CDE_add_ignore_process_path(char* p) {
+  _add_to_array_internal(ignore_process_paths, &ignore_process_paths_ind, p, "ignore_process_paths");
+}
+
 void CDE_add_redirect_exact_path(char* p) {
   _add_to_array_internal(redirect_exact_paths, &redirect_exact_paths_ind, p, "redirect_exact_paths");
 }
@@ -3099,6 +3179,9 @@ void CDE_init_options() {
         else if (strcmp(p, "redirect_substr") == 0) {
           set_id = 7;
         }
+        else if (strcmp(p, "ignore_process") == 0) {
+          set_id = 8;
+        }
         else {
           fprintf(stderr, "Fatal error in cde.options: unrecognized token '%s'\n", p);
           exit(1);
@@ -3128,6 +3211,9 @@ void CDE_init_options() {
             break;
           case 7:
             CDE_add_redirect_substr_path(p);
+            break;
+          case 8:
+            CDE_add_ignore_process_path(p);
             break;
           default:
             assert(0);
