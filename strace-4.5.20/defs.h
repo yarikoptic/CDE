@@ -356,10 +356,8 @@ struct tcb {
 	int pfd_status;
 #endif
 
-
-  // new fields added by pgbovine - YOU MUST NULL OUT fields and properly
+  // new fields added by pgbovine
   // handle memory management in alloc_tcb_CDE_fields() and free_tcb_CDE_fields()
-
   char* opened_filename; // non-null during a call when a file has been opened
 
   // inherited from parent during fork()
@@ -389,12 +387,6 @@ struct tcb {
   long savedword;
   void* savedaddr;
   char setting_up_shm; // 1 if we're in the process of setting up shared memory
-
-  char ignore_process; // 1 if cde-exec should totally ignore this process and
-                       // NOT redirect any file accesses made by this
-                       // process.  Note that this property is NOT
-                       // inherited from the parent process.  It should
-                       // only be set with ignore_process=... in cde.options
 };
 
 // pgbovine
