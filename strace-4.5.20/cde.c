@@ -3219,6 +3219,11 @@ void CDE_init_options() {
           exit(1);
         }
 
+        if (in_braces && set_id != 9) {
+          fprintf(stderr, "Fatal error in cde.options: Only 'process_ignore_prefix' is allowed within { } after an 'ignore_process' directive\n", p);
+          exit(1);
+        }
+
         is_first_token = 0;
       }
       else {
