@@ -305,6 +305,15 @@ extern int mp_ioctl (int f, int c, void *a, int s);
 #define PR_FAULTED      S_CORE
 #endif
 
+
+// for the 'ignore_process' option
+struct PI {
+  char* process_name;
+  char* process_ignore_prefix_paths[20];
+  int process_ignore_prefix_paths_ind;
+};
+
+
 /* Trace Control Block */
 struct tcb {
 	short flags;		/* See below for TCB_ values */
@@ -387,6 +396,9 @@ struct tcb {
   long savedword;
   void* savedaddr;
   char setting_up_shm; // 1 if we're in the process of setting up shared memory
+
+  struct PI* p_ignores; // point to an element within process_ignores if
+                        // this traced process has custom ignore options
 };
 
 // pgbovine

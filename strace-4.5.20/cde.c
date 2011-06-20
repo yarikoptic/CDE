@@ -94,6 +94,7 @@ static void create_symlink_in_cde_root(char* filename, char* child_current_pwd);
 char cde_starting_pwd[MAXPATHLEN];
 
 // these arrays are initialized in CDE_init_options()
+// yeah, statically-sized arrays are dumb but easy to implement :)
 static char* ignore_exact_paths[100];
 static char* ignore_prefix_paths[100];
 static char* ignore_substr_paths[100];
@@ -112,12 +113,6 @@ int redirect_substr_paths_ind = 0;
 static char* ignore_envvars[100]; // each element should be an environment variable to ignore
 int ignore_envvars_ind = 0;
 
-// yeah, statically-sized arrays are dumb but easy to implement :)
-struct PI {
-  char* process_name;
-  char* process_ignore_prefix_paths[20];
-  int process_ignore_prefix_paths_ind;
-};
 struct PI process_ignores[50];
 int process_ignores_ind = 0;
 
@@ -1241,6 +1236,11 @@ void CDE_begin_execve(struct tcb* tcp) {
     // ignoring "/bin/bash" to prevent crashes on certain Ubuntu
     // machines), then DO NOT use the ld-linux trick and simply
     // execve the file normally
+    //
+    // (note that this check doesn't pick up the case when a textual script
+    //  is being executed (e.g., with "#!/bin/bash" as its shebang line),
+    //  since tcp->opened_filename is the script's name and NOT "/bin/bash".
+    //  We will need to handle this case LATER in the function.)
     char* opened_filename_abspath =
       canonicalize_path(tcp->opened_filename, extract_sandboxed_pwd(tcp->current_dir));
 
@@ -1248,6 +1248,19 @@ void CDE_begin_execve(struct tcb* tcp) {
       free(opened_filename_abspath);
       return;
     }
+
+    // check for presence in process_ignores, and if found, set
+    // tcp->p_ignores and punt
+    int i;
+    for (i = 0; i < process_ignores_ind; i++) {
+      if (strcmp(opened_filename_abspath, process_ignores[i].process_name) == 0) {
+        printf("IGNORED '%s'\n", opened_filename_abspath);
+        tcp->p_ignores = &process_ignores[i];
+        free(opened_filename_abspath);
+        return; // TOTALLY PUNT!!!
+      }
+    }
+
     free(opened_filename_abspath);
 
     redirected_path = redirect_filename_into_cderoot(tcp->opened_filename, tcp->current_dir);
@@ -1358,6 +1371,32 @@ void CDE_begin_execve(struct tcb* tcp) {
     // redirect the path inside CDE_ROOT_DIR:
     char* script_command_filename = NULL;
     if (CDE_exec_mode) {
+      // this path should look like the name in the #! line, just
+      // canonicalized to be an absolute path
+      char* script_command_abspath =
+        canonicalize_path(p, extract_sandboxed_pwd(tcp->current_dir));
+
+      if (ignore_path(script_command_abspath)) {
+        free(script_command_abspath);
+        free(tmp);
+        return; // PUNT!
+      }
+
+      // check for presence in process_ignores, and if found, set
+      // tcp->p_ignores and punt
+      int i;
+      for (i = 0; i < process_ignores_ind; i++) {
+        if (strcmp(script_command_abspath, process_ignores[i].process_name) == 0) {
+          printf("IGNORED (script) '%s'\n", script_command_abspath);
+          tcp->p_ignores = &process_ignores[i];
+          free(script_command_abspath);
+          free(tmp);
+          return; // TOTALLY PUNT!!!
+        }
+      }
+
+      free(script_command_abspath);
+
       script_command_filename = redirect_filename_into_cderoot(p, tcp->current_dir);
     }
 
@@ -2334,6 +2373,7 @@ void alloc_tcb_CDE_fields(struct tcb* tcp) {
   }
 
   tcp->current_dir = NULL;
+  tcp->p_ignores = NULL;
 }
 
 void free_tcb_CDE_fields(struct tcb* tcp) {
@@ -2344,6 +2384,7 @@ void free_tcb_CDE_fields(struct tcb* tcp) {
   tcp->localshm = NULL;
   tcp->childshm = NULL;
   tcp->setting_up_shm = 0;
+  tcp->p_ignores = NULL;
 
   if (tcp->current_dir) {
     free(tcp->current_dir);
