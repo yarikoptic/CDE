@@ -112,6 +112,15 @@ int redirect_substr_paths_ind = 0;
 static char* ignore_envvars[100]; // each element should be an environment variable to ignore
 int ignore_envvars_ind = 0;
 
+// yeah, statically-sized arrays are dumb but easy to implement :)
+struct PI {
+  char* process_name;
+  char* process_ignore_prefix_paths[20];
+  int process_ignore_prefix_paths_ind;
+};
+struct PI process_ignores[50];
+int process_ignores_ind = 0;
+
 
 // the absolute path to the cde-root/ directory, since that will be
 // where our fake filesystem starts. e.g., if cde_starting_pwd is
@@ -3003,7 +3012,7 @@ void CDE_add_ignore_envvar(char* p) {
 // On 2011-06-22, added support for process-specific ignores, with the following syntax:
 // ignore_process=<exact path to ignore>
 // {
-//   ignore_prefix=<path prefix to ignore>
+//   process_ignore_prefix=<path prefix to ignore for the given process>
 // }
 void CDE_init_options() {
   memset(ignore_exact_paths,    0, sizeof(ignore_exact_paths));
@@ -3013,6 +3022,7 @@ void CDE_init_options() {
   memset(redirect_prefix_paths, 0, sizeof(redirect_prefix_paths));
   memset(redirect_substr_paths, 0, sizeof(redirect_substr_paths));
   memset(ignore_envvars,        0, sizeof(ignore_envvars));
+  memset(process_ignores,       0, sizeof(process_ignores));
 
   ignore_exact_paths_ind = 0;
   ignore_prefix_paths_ind = 0;
@@ -3021,7 +3031,9 @@ void CDE_init_options() {
   redirect_prefix_paths_ind = 0;
   redirect_substr_paths_ind = 0;
   ignore_envvars_ind = 0;
+  process_ignores_ind = 0;
 
+  char in_braces = false;
 
   FILE* f = NULL;
 
@@ -3089,6 +3101,17 @@ void CDE_init_options() {
       continue;
     }
 
+    // for process_ignore_prefix directives
+    if (line[0] == '{') {
+      assert(process_ignores_ind > 0); // ignore_process must've come first!
+      in_braces = 1;
+      continue;
+    }
+    else if (line[0] == '}') {
+      in_braces = 0;
+      continue;
+    }
+
     char* p;
     char is_first_token = 1;
     char set_id = -1;
@@ -3116,6 +3139,16 @@ void CDE_init_options() {
         else if (strcmp(p, "redirect_substr") == 0) {
           set_id = 7;
         }
+        else if (strcmp(p, "ignore_process") == 0) {
+          set_id = 8;
+        }
+        else if (strcmp(p, "process_ignore_prefix") == 0) {
+          if (!in_braces) {
+            fprintf(stderr, "Fatal error in cde.options: 'process_ignore_prefix' must be enclosed in { } after an 'ignore_process' directive\n", p);
+            exit(1);
+          }
+          set_id = 9;
+        }
         else {
           fprintf(stderr, "Fatal error in cde.options: unrecognized token '%s'\n", p);
           exit(1);
@@ -3124,6 +3157,8 @@ void CDE_init_options() {
         is_first_token = 0;
       }
       else {
+        struct PI* cur = NULL;
+
         switch (set_id) {
           case 1:
             CDE_add_ignore_exact_path(p);
@@ -3145,6 +3180,40 @@ void CDE_init_options() {
             break;
           case 7:
             CDE_add_redirect_substr_path(p);
+            break;
+          case 8:
+            assert(process_ignores[process_ignores_ind].process_name == NULL);
+            process_ignores[process_ignores_ind].process_name = strdup(p);
+            process_ignores[process_ignores_ind].process_ignore_prefix_paths_ind = 0;
+
+            // debug printf
+            //fprintf(stderr, "process_ignores[%d] = '%s'\n",
+            //        process_ignores_ind, process_ignores[process_ignores_ind].process_name);
+
+            process_ignores_ind++;
+            if (process_ignores_ind >= 50) {
+              fprintf(stderr, "Fatal error in cde.options: more than 50 'ignore_process' entries\n");
+              exit(1);
+            }
+            break;
+          case 9:
+            assert(process_ignores_ind > 0);
+            // attach to the LATEST element in process_ignores
+            cur = &process_ignores[process_ignores_ind-1];
+            assert(cur->process_name);
+            cur->process_ignore_prefix_paths[cur->process_ignore_prefix_paths_ind] = strdup(p);
+
+            // debug printf
+            //fprintf(stderr, "process_ignores[%s][%d] = '%s'\n",
+            //        cur->process_name,
+            //        cur->process_ignore_prefix_paths_ind,
+            //        cur->process_ignore_prefix_paths[cur->process_ignore_prefix_paths_ind]);
+
+            cur->process_ignore_prefix_paths_ind++;
+            if (cur->process_ignore_prefix_paths_ind >= 20) {
+              fprintf(stderr, "Fatal error in cde.options: more than 20 'process_ignore_prefix' entries\n");
+              exit(1);
+            }
             break;
           default:
             assert(0);
