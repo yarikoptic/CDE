@@ -3063,12 +3063,12 @@ void CDE_init_options() {
     line[read-1] = '\0'; // strip of trailing newline
 
     // strip off leading and trailing spaces
-    while (isspace(*line)) {
+    while (*line && isspace(*line)) {
       line++;
     }
 
-    ssize_t last = strlen(line) - 1;
-    while (isspace(line[last])) {
+    int last = strlen(line) - 1;
+    while (last >= 0 && isspace(line[last])) {
       line[last] = '\0';
       last--;
     }
