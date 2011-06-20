@@ -2999,6 +2999,12 @@ void CDE_add_ignore_envvar(char* p) {
 // redirect_prefix=<path prefix to allow>
 // redirect_substr=<path substring to allow>
 // ignore_environment_var=<environment variable to ignore>
+//
+// On 2011-06-22, added support for process-specific ignores, with the following syntax:
+// ignore_process=<exact path to ignore>
+// {
+//   ignore_prefix=<path prefix to ignore>
+// }
 void CDE_init_options() {
   memset(ignore_exact_paths,    0, sizeof(ignore_exact_paths));
   memset(ignore_prefix_paths,   0, sizeof(ignore_prefix_paths));
@@ -3055,6 +3061,17 @@ void CDE_init_options() {
   while ((read = getline(&line, &len, f)) != -1) {
     assert(line[read-1] == '\n');
     line[read-1] = '\0'; // strip of trailing newline
+
+    // strip off leading and trailing spaces
+    while (isspace(*line)) {
+      line++;
+    }
+
+    ssize_t last = strlen(line) - 1;
+    while (isspace(line[last])) {
+      line[last] = '\0';
+      last--;
+    }
 
     // make sure there's an appropriate version number on first line
     if (is_first_line) {
