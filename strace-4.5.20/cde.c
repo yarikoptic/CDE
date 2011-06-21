@@ -1250,6 +1250,10 @@ void CDE_begin_execve(struct tcb* tcp) {
   // anything and simply let the execve fail just like it's supposed to
   struct stat filename_stat;
 
+  // NULL out p_ignores since you might have inherited it from your parent after
+  // forking, but when you exec, you're probably now executing a different program
+  tcp->p_ignores = NULL;
+
   if (CDE_verbose_mode) {
     printf("CDE_begin_execve '%s'\n", tcp->opened_filename);
   }
@@ -2857,6 +2861,11 @@ void CDE_init_tcb_dir_fields(struct tcb* tcp) {
     assert(tcp->parent->current_dir);
     strcpy(tcp->current_dir, tcp->parent->current_dir);
     //printf("inherited %s [%d]\n", tcp->current_dir, tcp->pid);
+
+    // inherit from parent since you're executing the same program after
+    // forking (at least until you do an exec)
+    tcp->p_ignores = tcp->parent->p_ignores;
+
 
     // TODO: I don't know whether this covers all the cases of process forking ...
     if (CDE_provenance_mode) {
