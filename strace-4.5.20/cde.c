@@ -294,6 +294,27 @@ static int ignore_path(char* filename, struct tcb* tcp) {
 
   int i;
 
+  // process-specific ignores take precedence over global ignores
+  // remember, tcp is optional
+  if (tcp && tcp->p_ignores) {
+    if (strcmp(filename, tcp->p_ignores->process_name) == 0) {
+      if (CDE_verbose_mode) {
+        printf("IGNORED '%s' (process=%s)\n", filename, tcp->p_ignores->process_name);
+      }
+      return 1;
+    }
+    for (i = 0; i < tcp->p_ignores->process_ignore_prefix_paths_ind; i++) {
+      char* p = tcp->p_ignores->process_ignore_prefix_paths[i];
+      if (strncmp(filename, p, strlen(p)) == 0) {
+        if (CDE_verbose_mode) {
+          printf("IGNORED '%s' [%s] (process=%s)\n", filename, p, tcp->p_ignores->process_name);
+        }
+        return 1;
+      }
+    }
+  }
+
+
   // redirect paths override ignore paths
   for (i = 0; i < redirect_exact_paths_ind; i++) {
     if (strcmp(filename, redirect_exact_paths[i]) == 0) {
@@ -329,26 +350,6 @@ static int ignore_path(char* filename, struct tcb* tcp) {
       return 1;
     }
   }
-
-  // remember, tcp is optional
-  if (tcp && tcp->p_ignores) {
-    if (strcmp(filename, tcp->p_ignores->process_name) == 0) {
-      if (CDE_verbose_mode) {
-        printf("IGNORED '%s' (process=%s)\n", filename, tcp->p_ignores->process_name);
-      }
-      return 1;
-    }
-    for (i = 0; i < tcp->p_ignores->process_ignore_prefix_paths_ind; i++) {
-      char* p = tcp->p_ignores->process_ignore_prefix_paths[i];
-      if (strncmp(filename, p, strlen(p)) == 0) {
-        if (CDE_verbose_mode) {
-          printf("IGNORED '%s' [%s] (process=%s)\n", filename, p, tcp->p_ignores->process_name);
-        }
-        return 1;
-      }
-    }
-  }
-
 
   if (cde_exec_from_outside_cderoot) {
     // if we're running cde-exec from OUTSIDE of cde-root/, then adopt a
