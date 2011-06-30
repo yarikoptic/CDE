@@ -494,6 +494,10 @@ done:
 }
 
 
+extern int isascii(int c);
+extern int isprint(int c);
+extern int isspace(int c);
+
 #define STRING_ISGRAPHIC(c) ( ((c) == '\t' || (isascii (c) && isprint (c))) )
 
 /* If filename is an ELF binary file, then do a binary grep through it
@@ -1044,7 +1048,7 @@ void CDE_end_standard_fileop(struct tcb* tcp, const char* syscall_name,
   assert(tcp->opened_filename);
 
   if (CDE_verbose_mode) {
-    printf("END   %s '%s' (%u)\n", syscall_name, tcp->opened_filename, tcp->u_rval);
+    printf("END   %s '%s' (%u)\n", syscall_name, tcp->opened_filename, (unsigned int)tcp->u_rval);
   }
  
 
@@ -1063,13 +1067,13 @@ void CDE_end_standard_fileop(struct tcb* tcp, const char* syscall_name,
         // Note: tcp->u_arg[1] is only for open(), not openat()
         unsigned char open_mode = (tcp->u_arg[1] & 3);
         if (open_mode == O_RDONLY) {
-          fprintf(CDE_provenance_logfile, "%d %u READ %s\n", time(0), tcp->pid, filename_abspath);
+          fprintf(CDE_provenance_logfile, "%d %u READ %s\n", (int)time(0), tcp->pid, filename_abspath);
         }
         else if (open_mode == O_WRONLY) {
-          fprintf(CDE_provenance_logfile, "%d %u WRITE %s\n", time(0), tcp->pid, filename_abspath);
+          fprintf(CDE_provenance_logfile, "%d %u WRITE %s\n", (int)time(0), tcp->pid, filename_abspath);
         }
         else if (open_mode == O_RDWR) {
-          fprintf(CDE_provenance_logfile, "%d %u READ-WRITE %s\n", time(0), tcp->pid, filename_abspath);
+          fprintf(CDE_provenance_logfile, "%d %u READ-WRITE %s\n", (int)time(0), tcp->pid, filename_abspath);
         }
 
         free(filename_abspath);
@@ -1111,7 +1115,7 @@ void CDE_begin_at_fileop(struct tcb* tcp, const char* syscall_name) {
   tcp->opened_filename = strcpy_from_child(tcp, tcp->u_arg[1]);
 
   if (CDE_verbose_mode) {
-    printf("BEGIN %s '%s' (dirfd=%d)\n", syscall_name, tcp->opened_filename, tcp->u_arg[0]);
+    printf("BEGIN %s '%s' (dirfd=%u)\n", syscall_name, tcp->opened_filename, (unsigned int)tcp->u_arg[0]);
   }
 
   if (!IS_ABSPATH(tcp->opened_filename) && tcp->u_arg[0] != AT_FDCWD) {
@@ -1738,7 +1742,7 @@ void CDE_begin_execve(struct tcb* tcp) {
       }
 
 
-      char** real_program_path_base = (char**)(base + offset1);
+      char* real_program_path_base = (char*)(base + offset1);
       strcpy(real_program_path_base, tcp->perceived_program_fullpath);
 
       int offset2 = strlen(tcp->perceived_program_fullpath) + 1;
@@ -1891,7 +1895,7 @@ void CDE_end_execve(struct tcb* tcp) {
       if (CDE_provenance_mode) {
         char* filename_abspath = canonicalize_path(tcp->opened_filename, tcp->current_dir);
         assert(filename_abspath);
-        fprintf(CDE_provenance_logfile, "%d %u EXECVE %s\n", time(0), tcp->pid, filename_abspath);
+        fprintf(CDE_provenance_logfile, "%d %u EXECVE %s\n", (int)time(0), tcp->pid, filename_abspath);
         free(filename_abspath);
       }
 
@@ -2870,7 +2874,7 @@ void CDE_init_tcb_dir_fields(struct tcb* tcp) {
 
     // TODO: I don't know whether this covers all the cases of process forking ...
     if (CDE_provenance_mode) {
-      fprintf(CDE_provenance_logfile, "%d %u SPAWN %u\n", time(0), tcp->parent->pid, tcp->pid);
+      fprintf(CDE_provenance_logfile, "%d %u SPAWN %u\n", (int)time(0), tcp->parent->pid, tcp->pid);
     }
   }
   else {
@@ -3219,7 +3223,7 @@ void CDE_init_options() {
         }
         else if (strcmp(p, "process_ignore_prefix") == 0) {
           if (!in_braces) {
-            fprintf(stderr, "Fatal error in cde.options: 'process_ignore_prefix' must be enclosed in { } after an 'ignore_process' directive\n", p);
+            fprintf(stderr, "Fatal error in cde.options: 'process_ignore_prefix' must be enclosed in { } after an 'ignore_process' directive\n");
             exit(1);
           }
           set_id = 9;
@@ -3230,7 +3234,7 @@ void CDE_init_options() {
         }
 
         if (in_braces && set_id != 9) {
-          fprintf(stderr, "Fatal error in cde.options: Only 'process_ignore_prefix' is allowed within { } after an 'ignore_process' directive\n", p);
+          fprintf(stderr, "Fatal error in cde.options: Only 'process_ignore_prefix' is allowed within { } after an 'ignore_process' directive\n");
           exit(1);
         }
 
@@ -3491,8 +3495,8 @@ void CDE_begin_socket_bind_or_connect(struct tcb *tcp) {
 
           // we want to override arg[2], which is located at:
           //   cur_regs.ecx + 2*sizeof(unsigned long)
-          memcpy_to_child(tcp->pid, cur_regs.ecx + 2*sizeof(unsigned long),
-                          &new_totallen, sizeof(unsigned long));
+          memcpy_to_child(tcp->pid, (char*)(cur_regs.ecx + 2*sizeof(unsigned long)),
+                          (char*)(&new_totallen), sizeof(unsigned long));
 #elif defined(X86_64)
           // on x86-64, things are much simpler.  the length field is
           // stored in %rdx (the third argument), so simply override
