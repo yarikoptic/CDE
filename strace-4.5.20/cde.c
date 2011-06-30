@@ -1,4 +1,4 @@
-/* 
+/*
 
 CDE: Code, Data, and Environment packaging for Linux
 http://www.stanford.edu/~pgbovine/cde.html
@@ -21,10 +21,12 @@ CDE is currently licensed under GPL v3:
 */
 
 
-/* System call calling conventions:
-  
+/* Linux system call calling conventions:
+
    According to this page:
      http://stackoverflow.com/questions/2535989/what-are-the-calling-conventions-for-unix-linux-system-calls-on-x86-64
+
+   ... and the source code for systrace: http://www.citi.umich.edu/u/provos/systrace/
 
   32-bit x86:
     syscall number: %eax
@@ -32,7 +34,9 @@ CDE is currently licensed under GPL v3:
 
   64-bit x86-64:
     syscall number: %rax
-    first 6 syscall parameters: %rdi, %rsi, %rdx, %rcx, %r8 and %r9
+    first 6 syscall parameters (for a 64-bit target process): %rdi, %rsi, %rdx, %rcx, %r8 and %r9
+    first 6 syscall parameters (for a 32-bit target process): %rbx, %rcx, %rdx, %rsi, %rdi, %rbp
+      (note how these are similar to the 32-bit syscall parameter registers)
 
 */
 
@@ -669,7 +673,12 @@ static void modify_syscall_single_arg(struct tcb* tcp, int arg_num) {
 #if defined (I386)
     cur_regs.ebx = (long)tcp->childshm;
 #elif defined(X86_64)
-    cur_regs.rdi = (long)tcp->childshm;
+    if (tcp->is_32bit_emu) {
+      cur_regs.rbx = (long)tcp->childshm;
+    }
+    else {
+      cur_regs.rdi = (long)tcp->childshm;
+    }
 #else
     #error "Unknown architecture (not I386 or X86_64)"
 #endif
@@ -679,7 +688,12 @@ static void modify_syscall_single_arg(struct tcb* tcp, int arg_num) {
 #if defined (I386)
     cur_regs.ecx = (long)tcp->childshm;
 #elif defined(X86_64)
-    cur_regs.rsi = (long)tcp->childshm;
+    if (tcp->is_32bit_emu) {
+      cur_regs.rcx = (long)tcp->childshm;
+    }
+    else {
+      cur_regs.rsi = (long)tcp->childshm;
+    }
 #else
     #error "Unknown architecture (not I386 or X86_64)"
 #endif
@@ -725,8 +739,14 @@ static void modify_syscall_two_args(struct tcb* tcp) {
     cur_regs.ebx = (long)tcp->childshm;
     cur_regs.ecx = (long)(((char*)tcp->childshm) + len1 + 1);
 #elif defined(X86_64)
-    cur_regs.rdi = (long)tcp->childshm;
-    cur_regs.rsi = (long)(((char*)tcp->childshm) + len1 + 1);
+    if (tcp->is_32bit_emu) {
+      cur_regs.rbx = (long)tcp->childshm;
+      cur_regs.rcx = (long)(((char*)tcp->childshm) + len1 + 1);
+    }
+    else {
+      cur_regs.rdi = (long)tcp->childshm;
+      cur_regs.rsi = (long)(((char*)tcp->childshm) + len1 + 1);
+    }
 #else
   #error "Unknown architecture (not I386 or X86_64)"
 #endif
@@ -748,7 +768,12 @@ static void modify_syscall_two_args(struct tcb* tcp) {
 #if defined (I386)
     cur_regs.ebx = (long)tcp->childshm; // only set EBX
 #elif defined(X86_64)
-    cur_regs.rdi = (long)tcp->childshm;
+    if (tcp->is_32bit_emu) {
+      cur_regs.rbx = (long)tcp->childshm;
+    }
+    else {
+      cur_regs.rdi = (long)tcp->childshm;
+    }
 #else
   #error "Unknown architecture (not I386 or X86_64)"
 #endif
@@ -764,7 +789,12 @@ static void modify_syscall_two_args(struct tcb* tcp) {
 #if defined (I386)
     cur_regs.ecx = (long)tcp->childshm; // only set ECX
 #elif defined(X86_64)
-    cur_regs.rsi = (long)tcp->childshm;
+    if (tcp->is_32bit_emu) {
+      cur_regs.rcx = (long)tcp->childshm;
+    }
+    else {
+      cur_regs.rsi = (long)tcp->childshm;
+    }
 #else
   #error "Unknown architecture (not I386 or X86_64)"
 #endif
@@ -811,8 +841,14 @@ static void modify_syscall_second_and_fourth_args(struct tcb* tcp) {
     cur_regs.ecx = (long)tcp->childshm;
     cur_regs.esi = (long)(((char*)tcp->childshm) + len1 + 1);
 #elif defined(X86_64)
-    cur_regs.rsi = (long)tcp->childshm;
-    cur_regs.rcx = (long)(((char*)tcp->childshm) + len1 + 1);
+    if (tcp->is_32bit_emu) {
+      cur_regs.rcx = (long)tcp->childshm;
+      cur_regs.rsi = (long)(((char*)tcp->childshm) + len1 + 1);
+    }
+    else {
+      cur_regs.rsi = (long)tcp->childshm;
+      cur_regs.rcx = (long)(((char*)tcp->childshm) + len1 + 1);
+    }
 #else
   #error "Unknown architecture (not I386 or X86_64)"
 #endif
@@ -828,7 +864,12 @@ static void modify_syscall_second_and_fourth_args(struct tcb* tcp) {
 #if defined (I386)
     cur_regs.ecx = (long)tcp->childshm;
 #elif defined(X86_64)
-    cur_regs.rsi = (long)tcp->childshm;
+    if (tcp->is_32bit_emu) {
+      cur_regs.rcx = (long)tcp->childshm;
+    }
+    else {
+      cur_regs.rsi = (long)tcp->childshm;
+    }
 #else
   #error "Unknown architecture (not I386 or X86_64)"
 #endif
@@ -844,7 +885,12 @@ static void modify_syscall_second_and_fourth_args(struct tcb* tcp) {
 #if defined (I386)
     cur_regs.esi = (long)tcp->childshm; // only set ECX
 #elif defined(X86_64)
-    cur_regs.rcx = (long)tcp->childshm;
+    if (tcp->is_32bit_emu) {
+      cur_regs.rsi = (long)tcp->childshm;
+    }
+    else {
+      cur_regs.rcx = (long)tcp->childshm;
+    }
 #else
   #error "Unknown architecture (not I386 or X86_64)"
 #endif
@@ -891,8 +937,14 @@ static void modify_syscall_first_and_third_args(struct tcb* tcp) {
     cur_regs.ebx = (long)tcp->childshm;
     cur_regs.edx = (long)(((char*)tcp->childshm) + len1 + 1);
 #elif defined(X86_64)
-    cur_regs.rdi = (long)tcp->childshm;
-    cur_regs.rdx = (long)(((char*)tcp->childshm) + len1 + 1);
+    if (tcp->is_32bit_emu) {
+      cur_regs.rbx = (long)tcp->childshm;
+      cur_regs.rdx = (long)(((char*)tcp->childshm) + len1 + 1);
+    }
+    else {
+      cur_regs.rdi = (long)tcp->childshm;
+      cur_regs.rdx = (long)(((char*)tcp->childshm) + len1 + 1);
+    }
 #else
   #error "Unknown architecture (not I386 or X86_64)"
 #endif
@@ -908,7 +960,12 @@ static void modify_syscall_first_and_third_args(struct tcb* tcp) {
 #if defined (I386)
     cur_regs.ebx = (long)tcp->childshm;
 #elif defined(X86_64)
-    cur_regs.rdi = (long)tcp->childshm;
+    if (tcp->is_32bit_emu) {
+      cur_regs.rbx = (long)tcp->childshm;
+    }
+    else {
+      cur_regs.rdi = (long)tcp->childshm;
+    }
 #else
   #error "Unknown architecture (not I386 or X86_64)"
 #endif
@@ -924,7 +981,12 @@ static void modify_syscall_first_and_third_args(struct tcb* tcp) {
 #if defined (I386)
     cur_regs.edx = (long)tcp->childshm; // only set ECX
 #elif defined(X86_64)
-    cur_regs.rdx = (long)tcp->childshm;
+    if (tcp->is_32bit_emu) {
+      cur_regs.rdx = (long)tcp->childshm;
+    }
+    else {
+      cur_regs.rdx = (long)tcp->childshm;
+    }
 #else
   #error "Unknown architecture (not I386 or X86_64)"
 #endif
@@ -1646,8 +1708,14 @@ void CDE_begin_execve(struct tcb* tcp) {
       cur_regs.ebx = (long)tcp->childshm;            // location of base
       cur_regs.ecx = ((long)tcp->childshm) + ((char*)new_argv - base); // location of new_argv
 #elif defined(X86_64)
-      cur_regs.rdi = (long)tcp->childshm;
-      cur_regs.rsi = ((long)tcp->childshm) + ((char*)new_argv - base);
+      if (tcp->is_32bit_emu) {
+        cur_regs.rbx = (long)tcp->childshm;
+        cur_regs.rcx = ((long)tcp->childshm) + ((char*)new_argv - base);
+      }
+      else {
+        cur_regs.rdi = (long)tcp->childshm;
+        cur_regs.rsi = ((long)tcp->childshm) + ((char*)new_argv - base);
+      }
 #else
   #error "Unknown architecture (not I386 or X86_64)"
 #endif
@@ -1788,7 +1856,7 @@ void CDE_begin_execve(struct tcb* tcp) {
       }
       */
 
-      
+
       if (CDE_use_linker_from_package) {
         // now set ebx to the new program name and ecx to the new argv array
         // to alter the arguments of the execv system call :0
@@ -1799,8 +1867,14 @@ void CDE_begin_execve(struct tcb* tcp) {
         cur_regs.ebx = (long)tcp->childshm;            // location of base
         cur_regs.ecx = ((long)tcp->childshm) + offset1 + offset2; // location of new_argv
 #elif defined(X86_64)
-        cur_regs.rdi = (long)tcp->childshm;
-        cur_regs.rsi = ((long)tcp->childshm) + offset1 + offset2;
+        if (tcp->is_32bit_emu) {
+          cur_regs.rbx = (long)tcp->childshm;
+          cur_regs.rcx = ((long)tcp->childshm) + offset1 + offset2;
+        }
+        else {
+          cur_regs.rdi = (long)tcp->childshm;
+          cur_regs.rsi = ((long)tcp->childshm) + offset1 + offset2;
+        }
 #else
     #error "Unknown architecture (not I386 or X86_64)"
 #endif
@@ -2381,6 +2455,8 @@ void alloc_tcb_CDE_fields(struct tcb* tcp) {
   tcp->childshm = NULL;
   tcp->setting_up_shm = 0;
 
+  tcp->is_32bit_emu = 0;
+
   if (CDE_exec_mode) {
     key_t key;
     // randomly probe for a valid shm key
@@ -2417,6 +2493,7 @@ void free_tcb_CDE_fields(struct tcb* tcp) {
   tcp->localshm = NULL;
   tcp->childshm = NULL;
   tcp->setting_up_shm = 0;
+  tcp->is_32bit_emu = 0;
   tcp->p_ignores = NULL;
 
   if (tcp->current_dir) {
@@ -2431,6 +2508,8 @@ void free_tcb_CDE_fields(struct tcb* tcp) {
 //
 // Setup a shared memory region within child process,
 // then repeat current system call
+//
+// WARNING: this code is very tricky and gross!
 static void begin_setup_shmat(struct tcb* tcp) {
   assert(tcp->localshm);
   assert(!tcp->childshm); // avoid duplicate calls
@@ -2444,8 +2523,13 @@ static void begin_setup_shmat(struct tcb* tcp) {
   // The return value of shmat (attached address) is actually stored in
   // the child's address space
   tcp->savedaddr = find_free_addr(tcp->pid, PROT_READ|PROT_WRITE, sizeof(int));
+
+  // store *tcp->savedaddr data (in child's address space) so that we can restore it later:
   tcp->savedword = ptrace(PTRACE_PEEKDATA, tcp->pid, tcp->savedaddr, 0);
   EXITIF(errno); // PTRACE_PEEKDATA reports error in errno
+
+  // To make the target process execute a shmat() on 32-bit x86, we need to make
+  // it execute the special __NR_ipc syscall with SHMAT as a param:
 
   /* The shmat call is implemented as a godawful sys_ipc. */
   cur_regs.orig_eax = __NR_ipc;
@@ -2462,11 +2546,34 @@ static void begin_setup_shmat(struct tcb* tcp) {
   cur_regs.edi = (long)NULL; /* We don't use shmat's shmaddr */
   cur_regs.ebp = 0; /* The "fifth" argument is unused. */
 #elif defined(X86_64)
-  // there is a direct shmat syscall in x86-64!!!
-  cur_regs.orig_rax = __NR_shmat;
-  cur_regs.rdi = tcp->shmid;
-  cur_regs.rsi = 0;
-  cur_regs.rdx = 0;
+  if( tcp->is_32bit_emu) {
+    // If we're on a 64-bit machine but tracing a 32-bit target process, then we
+    // need to make the 32-bit __NR_ipc SHMAT syscall as though we're on a 32-bit
+    // machine (see code above), except that we use registers like 'rbx' rather
+    // than 'ebx'.  This was VERY SUBTLE AND TRICKY to finally get right!
+
+    // this code is almost exactly copy-and-paste from the I386 section above,
+    // except that the register names are the x86-64 versions of the 32-bit regs
+    tcp->savedaddr = find_free_addr(tcp->pid, PROT_READ|PROT_WRITE, sizeof(int));
+    tcp->savedword = ptrace(PTRACE_PEEKDATA, tcp->pid, tcp->savedaddr, 0);
+    EXITIF(errno);
+
+    cur_regs.orig_rax = 117; // 117 is the numerical value of the __NR_ipc macro (not available on 64-bit hosts!)
+    cur_regs.rbx = 21;       // 21 is the numerical value of the SHMAT macro (not available on 64-bit hosts!)
+    cur_regs.rcx = tcp->shmid;
+    cur_regs.rdx = 0;
+    cur_regs.rsi = (long)tcp->savedaddr;
+    cur_regs.rdi = (long)NULL;
+    cur_regs.rbp = 0;
+  }
+  else {
+    // If the target process is 64-bit, then life is good, because
+    // there is a direct shmat syscall in x86-64!!!
+    cur_regs.orig_rax = __NR_shmat;
+    cur_regs.rdi = tcp->shmid;
+    cur_regs.rsi = 0;
+    cur_regs.rdx = 0;
+  }
 #else
   #error "Unknown architecture (not I386 or X86_64)"
 #endif
@@ -2485,6 +2592,8 @@ void finish_setup_shmat(struct tcb* tcp) {
   assert(cur_regs.orig_eax == __NR_ipc);
   assert(cur_regs.eax == 0);
 
+  // the pointer to the shared memory segment allocated by shmat() is actually
+  // located in *tcp->savedaddr (in the child's address space)
   errno = 0;
   tcp->childshm = (void*)ptrace(PTRACE_PEEKDATA, tcp->pid, tcp->savedaddr, 0);
   EXITIF(errno); // PTRACE_PEEKDATA reports error in errno
@@ -2498,16 +2607,39 @@ void finish_setup_shmat(struct tcb* tcp) {
   // TODO: is the use of 2 specific to 32-bit machines?
   tcp->saved_regs.eip = tcp->saved_regs.eip - 2;
 #elif defined(X86_64)
-  // there seems to be a direct shmat syscall in x86-64
-  assert(cur_regs.orig_rax == __NR_shmat);
+  if( tcp->is_32bit_emu) {
+    // If we're on a 64-bit machine but tracing a 32-bit target process, then we
+    // need to handle the return value of the 32-bit __NR_ipc SHMAT syscall as
+    // though we're on a 32-bit machine (see code above).  This was VERY SUBTLE
+    // AND TRICKY to finally get right!
 
-  // the return value of the direct shmat syscall is in %rax
-  tcp->childshm = (void*)cur_regs.rax;
+    // setup had better been a success!
+    assert(cur_regs.orig_rax == 117 /*__NR_ipc*/);
+    assert(cur_regs.rax == 0);
 
+    // the pointer to the shared memory segment allocated by shmat() is actually
+    // located in *tcp->savedaddr (in the child's address space)
+    errno = 0;
+    tcp->childshm = (void*)ptrace(PTRACE_PEEKDATA, tcp->pid, tcp->savedaddr, 0);
+    EXITIF(errno);
+    // restore original data in child's address space
+    EXITIF(ptrace(PTRACE_POKEDATA, tcp->pid, tcp->savedaddr, tcp->savedword));
+  }
+  else {
+    // If the target process is 64-bit, then life is good, because
+    // there is a direct shmat syscall in x86-64!!!
+    assert(cur_regs.orig_rax == __NR_shmat);
+
+    // the return value of the direct shmat syscall is in %rax
+    tcp->childshm = (void*)cur_regs.rax;
+  }
+
+  // the code below is identical regardless of whether the target process is
+  // 32-bit or 64-bit (on a 64-bit host)
   tcp->saved_regs.rax = tcp->saved_regs.orig_rax;
 
   // back up IP so that we can re-execute previous instruction
-  // TODO: wow, apparently the -2 offset works for 64-bit as well :)
+  // ... wow, apparently the -2 offset works for 64-bit as well :)
   tcp->saved_regs.rip = tcp->saved_regs.rip - 2;
 #else
   #error "Unknown architecture (not I386 or X86_64)"
@@ -3513,4 +3645,3 @@ void CDE_begin_socket_bind_or_connect(struct tcb *tcp) {
     }
   }
 }
-

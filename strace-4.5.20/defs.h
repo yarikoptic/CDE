@@ -306,7 +306,7 @@ extern int mp_ioctl (int f, int c, void *a, int s);
 #endif
 
 
-// for the 'ignore_process' option
+// for the 'ignore_process' option - pgbovine
 struct PI {
   char* process_name;
   char* process_ignore_prefix_paths[20];
@@ -393,9 +393,11 @@ struct tcb {
   char* localshm; // address in our address space
   void* childshm; // address in child's address space
   struct user_regs_struct saved_regs;
-  long savedword;
-  void* savedaddr;
+  long savedword;      // only relevant when forcing 32-bit target processes to do shmat()
+  void* savedaddr;     // only relevant when forcing 32-bit target processes to do shmat()
   char setting_up_shm; // 1 if we're in the process of setting up shared memory
+
+  char is_32bit_emu;   // 1 iff the target process is a 32-bit process running on a 64-bit host
 
   struct PI* p_ignores; // point to an element within process_ignores if
                         // this traced process has custom ignore options
