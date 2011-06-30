@@ -1362,6 +1362,8 @@ void CDE_begin_execve(struct tcb* tcp) {
   }
 
   char* path_to_executable = NULL;
+  char* exe_filename_abspath = NULL;
+
   if (redirected_path) {
     // TODO: we don't check whether it's a real executable file :/
     if (stat(redirected_path, &filename_stat) != 0) {
@@ -1371,12 +1373,15 @@ void CDE_begin_execve(struct tcb* tcp) {
     path_to_executable = redirected_path;
   }
   else {
-    // just check the file itself
+    // just check the file itself (REMEMBER TO GET ITS ABSOLUTE PATH!)
+    exe_filename_abspath = canonicalize_path(tcp->opened_filename, tcp->current_dir);
+
     // TODO: we don't check whether it's a real executable file :/
-    if (stat(tcp->opened_filename, &filename_stat) != 0) {
+    if (stat(exe_filename_abspath, &filename_stat) != 0) {
+      free(exe_filename_abspath);
       return;
     }
-    path_to_executable = tcp->opened_filename;
+    path_to_executable = exe_filename_abspath;
   }
   assert(path_to_executable);
 
@@ -1753,7 +1758,7 @@ void CDE_begin_execve(struct tcb* tcp) {
          that NEED to use the original names for the program files
          (which are themselves symlinks) rather than the names resulting
          from following all symlinks.
-        
+
          ok, this is super super super gross, but what we need to do is
          to set tcp->perceived_program_fullpath to the full path to the
          actual file of the target program's binary, making sure to first
@@ -1827,7 +1832,7 @@ void CDE_begin_execve(struct tcb* tcp) {
 
       // now populate argv[1:] directly from child's original space
       // (original arguments)
-   
+
       char** child_argv = (char**)tcp->u_arg[1]; // in child's address space
       char* cur_arg = NULL;
       int i = 1; // start at argv[1], since we're ignoring argv[0]
@@ -1937,6 +1942,10 @@ void CDE_begin_execve(struct tcb* tcp) {
 done:
   if (redirected_path) {
     free(redirected_path);
+  }
+
+  if (exe_filename_abspath) {
+    free(exe_filename_abspath);
   }
 
   if (script_command) {
