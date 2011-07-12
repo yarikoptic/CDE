@@ -3155,8 +3155,13 @@ void CDE_create_convenience_scripts(char** argv, int optind) {
   if (!strchr(target_program_fullpath, '/')) {
     char* toplevel_script_name = format("%s/%s", CDE_PACKAGE_DIR, cde_script_name);
     FILE* f = fopen(toplevel_script_name, "w");
+
+    // Thanks to probono@puredarwin.org for the following more robust
+    // start-up script idea, which creates a program that can be
+    // double-clicked and run from anywhere.
     fprintf(f, "#!/bin/sh\n");
-    fprintf(f, "cd cde-root && ../cde-exec");
+    fprintf(f, "HERE=\"$(dirname \"$(readlink -f \"${0}\")\")\"\n");
+    fprintf(f, "cd $HERE/cde-root && ../cde-exec");
 
     // include original command-line options
     int i;
