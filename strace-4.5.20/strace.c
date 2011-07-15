@@ -1111,8 +1111,11 @@ main(int argc, char *argv[])
       // distros have a /tmp directory that anybody can write into
       fputs("\n# These directories often contain pseudo-files that shouldn't be tracked\n", f);
       fputs("ignore_prefix=/dev/\n", f);
+      fputs("ignore_exact=/dev\n", f);
       fputs("ignore_prefix=/proc/\n", f);
+      fputs("ignore_exact=/proc\n", f);
       fputs("ignore_prefix=/sys/\n", f);
+      fputs("ignore_exact=/sys\n", f);
       fputs("ignore_prefix=/var/cache/\n", f);
       fputs("ignore_prefix=/var/lock/\n", f);
       fputs("ignore_prefix=/var/log/\n", f);
