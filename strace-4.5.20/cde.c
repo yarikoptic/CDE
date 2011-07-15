@@ -121,11 +121,6 @@ struct PI process_ignores[50];
 int process_ignores_ind = 0;
 
 
-extern char* CDE_PACKAGE_DIR;
-extern char* CDE_ROOT_DIR;
-extern int CDE_ROOT_LEN;
-
-
 // the absolute path to the cde-root/ directory, since that will be
 // where our fake filesystem starts. e.g., if cde_starting_pwd is
 //   /home/bob/cde-package/cde-root/home/alice/cool-experiment
