@@ -121,6 +121,11 @@ struct PI process_ignores[50];
 int process_ignores_ind = 0;
 
 
+extern char* CDE_PACKAGE_DIR;
+extern char* CDE_ROOT_DIR;
+extern int CDE_ROOT_LEN;
+
+
 // the absolute path to the cde-root/ directory, since that will be
 // where our fake filesystem starts. e.g., if cde_starting_pwd is
 //   /home/bob/cde-package/cde-root/home/alice/cool-experiment
@@ -3282,7 +3287,9 @@ void CDE_init_options() {
 
     // if found, copy it into the package
     if (f) {
-      copy_file("cde.options", CDE_PACKAGE_DIR "/cde.options");
+      char* fn = format("%s/cde.options", CDE_PACKAGE_DIR);
+      copy_file("cde.options", fn);
+      free(fn);
     }
     else {
       fprintf(stderr, "Fatal error: missing cde.options file\n");

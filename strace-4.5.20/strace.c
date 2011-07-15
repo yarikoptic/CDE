@@ -112,6 +112,11 @@ extern void CDE_init_allow_paths(void);
 extern void CDE_load_environment_vars(void);
 
 
+char* CDE_PACKAGE_DIR = NULL;
+char* CDE_ROOT_DIR = NULL;
+int CDE_ROOT_LEN = -1;
+
+
 int debug = 0, followfork = 1; // pgbovine - turn on followfork by default
 int dtime = 0, xflag = 0, qflag = 1; // pgbovine - turn on quiet mode (-q) by
                                      // default to shut up terminal line noise
@@ -217,15 +222,7 @@ int exitval;
   fprintf(ofp, "  -l  : Use native dynamic linker on machine (less portable but more robust)\n");
   fprintf(ofp, "  -p  : Provenance mode (output a provenance.log file)\n");
   fprintf(ofp, "  -v  : Verbose mode (for debugging)\n");
-
-  /*
-  fprintf(ofp, "\nOptions\n");
-  fprintf(ofp, "  -i <path prefix> : Ignore all paths with this prefix\n");
-  fprintf(ofp, "  -I <full path>   : Ignore exact path\n");
-  fprintf(ofp, "  -a <path prefix> : Allow all paths with this prefix (overrides ignore)\n");
-  fprintf(ofp, "  -A <full path>   : Allow exact path (overrides ignore)\n");
-  fprintf(ofp, "  -E <environment var> : Do NOT use this environment var's value from cde.full-environment\n");
-  */
+  fprintf(ofp, "  -o <output dir> : Set a custom output directory instead of \"cde-package/\"\n");
 
 	exit(exitval);
 }
@@ -757,7 +754,7 @@ main(int argc, char *argv[])
 
 	static char buf[BUFSIZ];
 
-  // make sure this constant is a reasonable number and not something KRAZY
+  // pgbovine - make sure this constant is a reasonable number and not something KRAZY
   if (MAXPATHLEN > (1024 * 4096)) {
     fprintf(stderr, "cde error, MAXPATHLEN is HUGE!!!\n");
     exit(1);
@@ -769,8 +766,275 @@ main(int argc, char *argv[])
   }
 	progname = argv[0];
 
+
+	/* Allocate the initial tcbtab.  */
+	tcbtabsize = argc;	/* Surely enough for all -p args.  */
+	if ((tcbtab = calloc(tcbtabsize, sizeof tcbtab[0])) == NULL) {
+		fprintf(stderr, "%s: out of memory\n", progname);
+		exit(1);
+	}
+	if ((tcbtab[0] = calloc(tcbtabsize, sizeof tcbtab[0][0])) == NULL) {
+		fprintf(stderr, "%s: out of memory\n", progname);
+		exit(1);
+	}
+	for (tcp = tcbtab[0]; tcp < &tcbtab[0][tcbtabsize]; ++tcp)
+		tcbtab[tcp - tcbtab[0]] = &tcbtab[0][tcp - tcbtab[0]];
+
+	outf = stderr;
+
+  // pgbovine - set interactive to 0 by default (rather than 1) so that we
+  // pass signals (e.g., SIGINT caused by Ctrl-C ) through to the child process
+	//interactive = 1;
+	interactive = 0;
+ 
+	set_sortby(DEFAULT_SORTBY);
+	set_personality(DEFAULT_PERSONALITY);
+
+  // pgbovine - only track selected system calls
+  // qualify actually mutates this string, so we can't pass in a constant
+  //
+  // syscalls added after Jan 1, 2011:
+  //   utimes,openat,faccessat,fstatat64,fchownat,fchmodat,futimesat,mknodat
+  //   linkat,symlinkat,renameat,readlinkat,mkdirat,unlinkat
+  //   exit_group (only for provenance mode)
+  char* tmp = strdup("trace=open,execve,stat,stat64,lstat,lstat64,oldstat,oldlstat,link,symlink,unlink,rename,access,creat,chmod,chown,chown32,lchown,lchown32,readlink,utime,truncate,truncate64,chdir,fchdir,mkdir,rmdir,getcwd,mknod,bind,connect,utimes,openat,faccessat,fstatat64,fchownat,fchmodat,futimesat,mknodat,linkat,symlinkat,renameat,readlinkat,mkdirat,unlinkat,exit_group");
+	qualify(tmp);
+  free(tmp);
+
+	qualify("abbrev=all");
+	qualify("verbose=all");
+	qualify("signal=all");
+	while ((c = getopt(argc, argv,
+		"+cCdfFhqrtTvVxzpl"
+#ifndef USE_PROCFS
+		"D"
+#endif
+		"a:A:e:o:O:s:S:u:E:i:I:")) != EOF) {
+		switch (c) {
+		case 'c':
+			if (cflag == CFLAG_BOTH) {
+				fprintf(stderr, "%s: -c and -C are mutually exclusive options\n",
+					progname);
+				exit(1);
+			}
+			cflag = CFLAG_ONLY_STATS;
+			break;
+		case 'C':
+			if (cflag == CFLAG_ONLY_STATS) {
+				fprintf(stderr, "%s: -c and -C are mutually exclusive options\n",
+					progname);
+				exit(1);
+			}
+			cflag = CFLAG_BOTH;
+			break;
+		case 'd':
+			debug++;
+			break;
+#ifndef USE_PROCFS
+		/* Experimental, not documented in manpage yet. */
+		case 'D':
+			daemonized_tracer = 1;
+			break;
+#endif
+		case 'F':
+			optF = 1;
+			break;
+		case 'f':
+			followfork++;
+			break;
+		case 'h':
+			usage(stdout, 0);
+			break;
+		case 'i':
+			//iflag++;
+			break;
+		case 'I':
+			break;
+		case 'q':
+			qflag++;
+			break;
+		case 'r':
+			rflag++;
+			tflag++;
+			break;
+		case 't':
+			tflag++;
+			break;
+		case 'T':
+			dtime++;
+			break;
+		case 'x':
+			xflag++;
+			break;
+		case 'v':
+      // pgbovine - hijack for the '-v' option
+			//qualify("abbrev=none");
+      CDE_verbose_mode = 1;
+			break;
+		case 'V':
+			printf("%s -- version %s\n", PACKAGE_NAME, VERSION);
+			exit(0);
+			break;
+		case 'z':
+			not_failing_only = 1;
+			break;
+		case 'a':
+			break;
+		case 'A':
+      break;
+		case 'e':
+			qualify(optarg);
+			break;
+		case 'o':
+      // pgbovine - hijack for the '-o' option
+      CDE_PACKAGE_DIR = strdup(optarg);
+			//outfname = strdup(optarg);
+			break;
+		case 'O':
+			set_overhead(atoi(optarg));
+			break;
+		case 'l':
+      // pgbovine - hijack for the '-l' option
+      CDE_use_linker_from_package = 0;
+      break;
+		case 'p':
+      // pgbovine - hijack for the '-p' option
+      CDE_provenance_mode = 1;
+      extern FILE* CDE_provenance_logfile;
+      CDE_provenance_logfile = fopen("provenance.log", "w");
+
+      /*
+			if ((pid = atoi(optarg)) <= 0) {
+				fprintf(stderr, "%s: Invalid process id: %s\n",
+					progname, optarg);
+				break;
+			}
+			if (pid == getpid()) {
+				fprintf(stderr, "%s: I'm sorry, I can't let you do that, Dave.\n", progname);
+				break;
+			}
+			tcp = alloc_tcb(pid, 0);
+      CDE_init_tcb_dir_fields(tcp); // pgbovine
+			tcp->flags |= TCB_ATTACHED;
+			pflag_seen++;
+      */
+			break;
+		case 's':
+			max_strlen = atoi(optarg);
+			if (max_strlen < 0) {
+				fprintf(stderr,
+					"%s: invalid -s argument: %s\n",
+					progname, optarg);
+				exit(1);
+			}
+			break;
+		case 'S':
+			set_sortby(optarg);
+			break;
+		case 'u':
+			username = strdup(optarg);
+			break;
+		case 'E':
+			break;
+		default:
+			usage(stderr, 1);
+			break;
+		}
+	}
+
+	if ((optind == argc) == !pflag_seen)
+		usage(stderr, 1);
+
+
+	if (!followfork)
+		followfork = optF;
+
+	if (followfork > 1 && cflag) {
+		fprintf(stderr,
+			"%s: (-c or -C) and -ff are mutually exclusive options\n",
+			progname);
+		exit(1);
+	}
+
+	/* See if they want to run as another user. */
+	if (username != NULL) {
+		struct passwd *pent;
+
+		if (getuid() != 0 || geteuid() != 0) {
+			fprintf(stderr,
+				"%s: you must be root to use the -u option\n",
+				progname);
+			exit(1);
+		}
+		if ((pent = getpwnam(username)) == NULL) {
+			fprintf(stderr, "%s: cannot find user `%s'\n",
+				progname, username);
+			exit(1);
+		}
+		run_uid = pent->pw_uid;
+		run_gid = pent->pw_gid;
+	}
+	else {
+		run_uid = getuid();
+		run_gid = getgid();
+	}
+
+	/* Check if they want to redirect the output. */
+	if (outfname) {
+		/* See if they want to pipe the output. */
+		if (outfname[0] == '|' || outfname[0] == '!') {
+			/*
+			 * We can't do the <outfname>.PID funny business
+			 * when using popen, so prohibit it.
+			 */
+			if (followfork > 1) {
+				fprintf(stderr, "\
+%s: piping the output and -ff are mutually exclusive options\n",
+					progname);
+				exit(1);
+			}
+
+			if ((outf = strace_popen(outfname + 1)) == NULL)
+				exit(1);
+		}
+		else if (followfork <= 1 &&
+			 (outf = strace_fopen(outfname, "w")) == NULL)
+			exit(1);
+	}
+
+	if (!outfname || outfname[0] == '|' || outfname[0] == '!')
+		setvbuf(outf, buf, _IOLBF, BUFSIZ);
+	if (outfname && optind < argc) {
+		interactive = 0;
+		qflag = 1;
+	}
+	/* Valid states here:
+	   optind < argc	pflag_seen	outfname	interactive
+	   1			0		0		1
+	   0			1		0		1
+	   1			0		1		0
+	   0			1		1		1
+	 */
+
+
+  // pgbovine - do all CDE initialization here after command-line options
+  // have been processed (argv[optind] is the name of the target program)
+
   // pgbovine - initialize this before doing anything else!
   getcwd(cde_starting_pwd, sizeof cde_starting_pwd);
+
+
+  if (!CDE_PACKAGE_DIR) { // if it hasn't been set by the '-o' option, set to a default
+    CDE_PACKAGE_DIR = "cde-package";
+  }
+  CDE_ROOT_DIR = calloc(strlen(CDE_PACKAGE_DIR) + 1 + strlen(CDE_ROOT_NAME) + 1,
+                        sizeof *CDE_ROOT_DIR);
+  strcpy(CDE_ROOT_DIR, CDE_PACKAGE_DIR);
+  strcat(CDE_ROOT_DIR, "/");
+  strcat(CDE_ROOT_DIR, CDE_ROOT_NAME);
+
+  CDE_ROOT_LEN = strlen(CDE_ROOT_DIR);
+ 
 
   // pgbovine - allow most promiscuous permissions for new files/directories
   umask(0000);
@@ -792,10 +1056,20 @@ main(int argc, char *argv[])
     mkdir(CDE_PACKAGE_DIR, 0777);
     mkdir(CDE_ROOT_DIR, 0777);
 
+    // if we can't even create CDE_ROOT_DIR, then abort with a failure
+    struct stat cde_rootdir_stat;
+    if (stat(CDE_ROOT_DIR, &cde_rootdir_stat)) {
+      fprintf(stderr, "Error: Cannot create CDE root directory at \"%s\"\n", CDE_ROOT_DIR);
+      exit(1);
+    }
+
+
     // collect uname information in CDE_PACKAGE_DIR/cde.uname
     struct utsname uname_info;
     if (uname(&uname_info) >= 0) {
-      FILE* uname_f = fopen(CDE_PACKAGE_DIR "/cde.uname", "w");
+      char* fn = format("%s/cde.uname", CDE_PACKAGE_DIR);
+      FILE* uname_f = fopen(fn, "w");
+      free(fn);
       if (uname_f) {
         fprintf(uname_f, "uname: '%s' '%s' '%s' '%s'\n",
                           uname_info.sysname,
@@ -898,274 +1172,6 @@ main(int argc, char *argv[])
   CDE_init_options();
 
 
-	/* Allocate the initial tcbtab.  */
-	tcbtabsize = argc;	/* Surely enough for all -p args.  */
-	if ((tcbtab = calloc(tcbtabsize, sizeof tcbtab[0])) == NULL) {
-		fprintf(stderr, "%s: out of memory\n", progname);
-		exit(1);
-	}
-	if ((tcbtab[0] = calloc(tcbtabsize, sizeof tcbtab[0][0])) == NULL) {
-		fprintf(stderr, "%s: out of memory\n", progname);
-		exit(1);
-	}
-	for (tcp = tcbtab[0]; tcp < &tcbtab[0][tcbtabsize]; ++tcp)
-		tcbtab[tcp - tcbtab[0]] = &tcbtab[0][tcp - tcbtab[0]];
-
-	outf = stderr;
-
-  // pgbovine - set interactive to 0 by default (rather than 1) so that we
-  // pass signals (e.g., SIGINT caused by Ctrl-C ) through to the child process
-	//interactive = 1;
-	interactive = 0;
- 
-	set_sortby(DEFAULT_SORTBY);
-	set_personality(DEFAULT_PERSONALITY);
-
-  // pgbovine - only track selected system calls
-  // qualify actually mutates this string, so we can't pass in a constant
-  //
-  // syscalls added after Jan 1, 2011:
-  //   utimes,openat,faccessat,fstatat64,fchownat,fchmodat,futimesat,mknodat
-  //   linkat,symlinkat,renameat,readlinkat,mkdirat,unlinkat
-  //   exit_group (only for provenance mode)
-  char* tmp = strdup("trace=open,execve,stat,stat64,lstat,lstat64,oldstat,oldlstat,link,symlink,unlink,rename,access,creat,chmod,chown,chown32,lchown,lchown32,readlink,utime,truncate,truncate64,chdir,fchdir,mkdir,rmdir,getcwd,mknod,bind,connect,utimes,openat,faccessat,fstatat64,fchownat,fchmodat,futimesat,mknodat,linkat,symlinkat,renameat,readlinkat,mkdirat,unlinkat,exit_group");
-	qualify(tmp);
-  free(tmp);
-
-	qualify("abbrev=all");
-	qualify("verbose=all");
-	qualify("signal=all");
-	while ((c = getopt(argc, argv,
-		"+cCdfFhqrtTvVxzpl"
-#ifndef USE_PROCFS
-		"D"
-#endif
-		"a:A:e:o:O:s:S:u:E:i:I:")) != EOF) {
-		switch (c) {
-		case 'c':
-			if (cflag == CFLAG_BOTH) {
-				fprintf(stderr, "%s: -c and -C are mutually exclusive options\n",
-					progname);
-				exit(1);
-			}
-			cflag = CFLAG_ONLY_STATS;
-			break;
-		case 'C':
-			if (cflag == CFLAG_ONLY_STATS) {
-				fprintf(stderr, "%s: -c and -C are mutually exclusive options\n",
-					progname);
-				exit(1);
-			}
-			cflag = CFLAG_BOTH;
-			break;
-		case 'd':
-			debug++;
-			break;
-#ifndef USE_PROCFS
-		/* Experimental, not documented in manpage yet. */
-		case 'D':
-			daemonized_tracer = 1;
-			break;
-#endif
-		case 'F':
-			optF = 1;
-			break;
-		case 'f':
-			followfork++;
-			break;
-		case 'h':
-			usage(stdout, 0);
-			break;
-		case 'i':
-			//iflag++;
-      // pgbovine - hijack for the '-i' option
-      //CDE_add_ignore_prefix_path(optarg);
-			break;
-		case 'I':
-      // pgbovine - hijack for the '-I' option
-      //CDE_add_ignore_exact_path(optarg);
-			break;
-		case 'q':
-			qflag++;
-			break;
-		case 'r':
-			rflag++;
-			tflag++;
-			break;
-		case 't':
-			tflag++;
-			break;
-		case 'T':
-			dtime++;
-			break;
-		case 'x':
-			xflag++;
-			break;
-		case 'v':
-      // pgbovine - hijack for the '-v' option
-			//qualify("abbrev=none");
-      CDE_verbose_mode = 1;
-			break;
-		case 'V':
-			printf("%s -- version %s\n", PACKAGE_NAME, VERSION);
-			exit(0);
-			break;
-		case 'z':
-			not_failing_only = 1;
-			break;
-		case 'a':
-      // pgbovine - hijack for the '-a' option
-      //CDE_add_allow_prefix_path(optarg);
-			//acolumn = atoi(optarg);
-			break;
-		case 'A':
-      // pgbovine - hijack for the '-A' option
-      //CDE_add_allow_exact_path(optarg);
-      break;
-		case 'e':
-			qualify(optarg);
-			break;
-		case 'o':
-			outfname = strdup(optarg);
-			break;
-		case 'O':
-			set_overhead(atoi(optarg));
-			break;
-		case 'l':
-      // pgbovine - hijack for the '-l' option
-      CDE_use_linker_from_package = 0;
-      break;
-		case 'p':
-      // pgbovine - hijack for the '-p' option
-      CDE_provenance_mode = 1;
-      extern FILE* CDE_provenance_logfile;
-      CDE_provenance_logfile = fopen("provenance.log", "w");
-
-      /*
-			if ((pid = atoi(optarg)) <= 0) {
-				fprintf(stderr, "%s: Invalid process id: %s\n",
-					progname, optarg);
-				break;
-			}
-			if (pid == getpid()) {
-				fprintf(stderr, "%s: I'm sorry, I can't let you do that, Dave.\n", progname);
-				break;
-			}
-			tcp = alloc_tcb(pid, 0);
-      CDE_init_tcb_dir_fields(tcp); // pgbovine
-			tcp->flags |= TCB_ATTACHED;
-			pflag_seen++;
-      */
-			break;
-		case 's':
-			max_strlen = atoi(optarg);
-			if (max_strlen < 0) {
-				fprintf(stderr,
-					"%s: invalid -s argument: %s\n",
-					progname, optarg);
-				exit(1);
-			}
-			break;
-		case 'S':
-			set_sortby(optarg);
-			break;
-		case 'u':
-			username = strdup(optarg);
-			break;
-		case 'E':
-      // pgbovine - hijack for the '-E' option
-      //CDE_add_ignore_envvar(optarg);
-      /*
-			if (putenv(optarg) < 0) {
-				fprintf(stderr, "%s: out of memory\n",
-					progname);
-				exit(1);
-			}
-      */
-			break;
-		default:
-			usage(stderr, 1);
-			break;
-		}
-	}
-
-	if ((optind == argc) == !pflag_seen)
-		usage(stderr, 1);
-
-
-	if (!followfork)
-		followfork = optF;
-
-	if (followfork > 1 && cflag) {
-		fprintf(stderr,
-			"%s: (-c or -C) and -ff are mutually exclusive options\n",
-			progname);
-		exit(1);
-	}
-
-	/* See if they want to run as another user. */
-	if (username != NULL) {
-		struct passwd *pent;
-
-		if (getuid() != 0 || geteuid() != 0) {
-			fprintf(stderr,
-				"%s: you must be root to use the -u option\n",
-				progname);
-			exit(1);
-		}
-		if ((pent = getpwnam(username)) == NULL) {
-			fprintf(stderr, "%s: cannot find user `%s'\n",
-				progname, username);
-			exit(1);
-		}
-		run_uid = pent->pw_uid;
-		run_gid = pent->pw_gid;
-	}
-	else {
-		run_uid = getuid();
-		run_gid = getgid();
-	}
-
-	/* Check if they want to redirect the output. */
-	if (outfname) {
-		/* See if they want to pipe the output. */
-		if (outfname[0] == '|' || outfname[0] == '!') {
-			/*
-			 * We can't do the <outfname>.PID funny business
-			 * when using popen, so prohibit it.
-			 */
-			if (followfork > 1) {
-				fprintf(stderr, "\
-%s: piping the output and -ff are mutually exclusive options\n",
-					progname);
-				exit(1);
-			}
-
-			if ((outf = strace_popen(outfname + 1)) == NULL)
-				exit(1);
-		}
-		else if (followfork <= 1 &&
-			 (outf = strace_fopen(outfname, "w")) == NULL)
-			exit(1);
-	}
-
-	if (!outfname || outfname[0] == '|' || outfname[0] == '!')
-		setvbuf(outf, buf, _IOLBF, BUFSIZ);
-	if (outfname && optind < argc) {
-		interactive = 0;
-		qflag = 1;
-	}
-	/* Valid states here:
-	   optind < argc	pflag_seen	outfname	interactive
-	   1			0		0		1
-	   0			1		0		1
-	   1			0		1		0
-	   0			1		1		1
-	 */
-
-
-  // pgbovine - do all CDE initialization here after command-line options
-  // have been processed (argv[optind] is the name of the target program)
 
   // pgbovine - ccache compiler cache causes weird issues with
   // non-reproducibility, so simply disable it
@@ -1182,7 +1188,9 @@ main(int argc, char *argv[])
     //
     // use /proc/self/exe since argv[0] might be simply 'cde'
     // (if the cde binary is in $PATH and we're invoking it only by its name)
-    copy_file("/proc/self/exe", CDE_PACKAGE_DIR "/cde-exec");
+    char* fn = format("%s/cde-exec", CDE_PACKAGE_DIR);
+    copy_file("/proc/self/exe", fn);
+    free(fn);
 
     CDE_create_convenience_scripts(argv, optind);
 
@@ -1191,14 +1199,16 @@ main(int argc, char *argv[])
     // run within cde-package
     struct stat tmp;
     FILE* log_f;
-    if (stat(CDE_PACKAGE_DIR "/cde.log", &tmp)) {
-      log_f = fopen(CDE_PACKAGE_DIR "/cde.log", "w");
+    char* log_filename = format("%s/cde.log", CDE_PACKAGE_DIR);
+    if (stat(log_filename, &tmp)) {
+      log_f = fopen(log_filename, "w");
       fprintf(log_f, "cd '" CDE_ROOT_NAME "%s'", cde_starting_pwd);
       fputc('\n', log_f);
     }
     else {
-      log_f = fopen(CDE_PACKAGE_DIR "/cde.log", "a");
+      log_f = fopen(log_filename, "a");
     }
+    free(log_filename);
 
     fprintf(log_f, "'./%s.cde'", basename(argv[optind]));
     int i;
@@ -1214,7 +1224,9 @@ main(int argc, char *argv[])
 
 
     // copy /proc/self/environ to capture the FULL set of environment vars
-    copy_file("/proc/self/environ", CDE_PACKAGE_DIR "/cde.full-environment");
+    char* fullenviron_fn = format("%s/cde.full-environment", CDE_PACKAGE_DIR);
+    copy_file("/proc/self/environ", fullenviron_fn);
+    free(fullenviron_fn);
   }
 
 
