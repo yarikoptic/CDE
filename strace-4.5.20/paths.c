@@ -4,8 +4,6 @@ CDE: Code, Data, and Environment packaging for Linux
 http://www.stanford.edu/~pgbovine/cde.html
 Philip Guo
 
-[I usually refer to this project by its original name: 'CDE']
-
 CDE is currently licensed under GPL v3:
 
   Copyright (c) 2010 Philip Guo <pg@cs.stanford.edu>

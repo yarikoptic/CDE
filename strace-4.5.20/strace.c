@@ -1175,12 +1175,15 @@ main(int argc, char *argv[])
   CDE_init_options();
 
 
-
   // pgbovine - ccache compiler cache causes weird issues with
   // non-reproducibility, so simply disable it
   //
-  // TODO: is this still true?  maybe we don't need this hack anymore
-  setenv("CCACHE_DISABLE", "1", 1);
+  // is this still true?  NO!
+  //
+  // let's take out this hack unless it's absolutely necessary,
+  // since I don't want there to be any hidden surprises for the user
+  //setenv("CCACHE_DISABLE", "1", 1);
+
 
   if (CDE_exec_mode) {
     CDE_load_environment_vars();
