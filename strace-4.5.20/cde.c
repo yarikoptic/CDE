@@ -3161,7 +3161,7 @@ void CDE_create_convenience_scripts(char** argv, int optind) {
     // double-clicked and run from anywhere.
     fprintf(f, "#!/bin/sh\n");
     fprintf(f, "HERE=\"$(dirname \"$(readlink -f \"${0}\")\")\"\n");
-    fprintf(f, "cd $HERE/cde-root && ../cde-exec");
+    fprintf(f, "cd \"$HERE/cde-root\" && ../cde-exec");
 
     // include original command-line options
     int i;
