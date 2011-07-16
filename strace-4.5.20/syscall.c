@@ -2421,10 +2421,14 @@ trace_syscall_exiting(struct tcb *tcp)
 	}
 
 	if (res != 1) {
+#ifdef PGBOVINE_COMMENT // pgbovine
 		tprintf(") ");
 		tabto(acolumn);
 		tprintf("= ? <unavailable>");
 		printtrailer();
+#endif // PGBOVINE_COMMENT // pgbovine
+    tcp_last = NULL; // pgbovine - simulates printtrailer() behavior without printing a newline
+
 		tcp->flags &= ~TCB_INSYSCALL;
 		return res;
 	}
@@ -2550,7 +2554,7 @@ trace_syscall_exiting(struct tcb *tcp)
 		return -1;
 #endif // PGBOVINE_COMMENT // pgbovine
 
-	tcp_last = NULL; // pgbovine - simulates printtrailer() without printing a newline
+	tcp_last = NULL; // pgbovine - simulates printtrailer() behavior without printing a newline
 
 	tcp->flags &= ~TCB_INSYSCALL;
 	return 0;

@@ -3021,7 +3021,8 @@ int col;
 void
 printtrailer(void)
 {
-	tprintf("\n");
+  // pgbovine - don't print anything!
+	//tprintf("\n");
 	tcp_last = NULL;
 }
 
