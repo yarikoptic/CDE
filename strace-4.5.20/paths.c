@@ -219,7 +219,7 @@ char* canonicalize_abspath(char* abspath) {
 }
 
 // canonicalizes a relative path with respect to base, mallocs a new string
-char* canonicalize_relpath(char* relpath, char* base) {
+static char* canonicalize_relpath(char* relpath, char* base) {
   struct path* p = new_path_from_relpath(relpath, base);
   char* ret = path2str(p, 0);
   delete_path(p);

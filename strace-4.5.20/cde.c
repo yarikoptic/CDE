@@ -203,7 +203,9 @@ static char* extract_sandboxed_pwd(char* real_pwd, struct tcb* tcp) {
 // prepend $CDE_ROOT_DIR to the given path string, assumes that the string
 // starts with '/' (i.e., it's an absolute path)
 //
-// warning - this returns a relative path
+// this could return either a relative or an absolute path, depending
+// on whether CDE_ROOT_DIR is a relative or absolute path, respectively
+//
 // mallocs a new string!
 char* prepend_cderoot(char* path) {
   assert(IS_ABSPATH(path));
@@ -225,14 +227,14 @@ char* create_abspath_within_cderoot(char* path) {
   else {
     // if we're making an ORIGINAL (tracing) run, then simply prepend
     // CDE_ROOT_DIR to path and canonicalize it
-    char* relpath_within_cde_root = prepend_cderoot(path);
+    char* path_within_cde_root = prepend_cderoot(path);
 
     // really really tricky ;)  if the child process has changed
-    // directories, then we can't rely on relpath_within_cde_root to
+    // directories, then we can't rely on path_within_cde_root to
     // exist.  instead, we must create an ABSOLUTE path based on
     // cde_starting_pwd, which is the directory where cde-exec was first launched!
-    char* ret = canonicalize_relpath(relpath_within_cde_root, cde_starting_pwd);
-    free(relpath_within_cde_root);
+    char* ret = canonicalize_path(path_within_cde_root, cde_starting_pwd);
+    free(path_within_cde_root);
 
     assert(IS_ABSPATH(ret));
     return ret;

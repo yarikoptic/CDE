@@ -74,7 +74,6 @@ struct path {
 char* get_path_component(struct path* p, int ind);
 
 char* canonicalize_abspath(char* abspath);
-char* canonicalize_relpath(char* relpath, char* base);
 char* canonicalize_path(char* path, char* relpath_base);
 
 struct path* new_path_from_abspath(char* path);
