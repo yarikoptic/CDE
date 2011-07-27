@@ -79,6 +79,8 @@ char cde_exec_from_outside_cderoot = 0;
 
 FILE* CDE_provenance_logfile = NULL; // only valid if -p option is used
 
+FILE* CDE_copied_files_logfile = NULL;
+
 static char cde_options_initialized = 0; // set to 1 after CDE_init_options() done
 
 static void begin_setup_shmat(struct tcb* tcp);
@@ -429,6 +431,10 @@ static void copy_file_into_cde_root(char* filename, char* child_current_pwd) {
   if (ignore_path(filename_abspath, NULL)) {
     free(filename_abspath);
     return;
+  }
+
+  if (CDE_copied_files_logfile) {
+    fprintf(CDE_copied_files_logfile, "%s\n", filename_abspath);
   }
 
   char* dst_path = prepend_cderoot(filename_abspath);

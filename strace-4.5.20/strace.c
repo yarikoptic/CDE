@@ -110,6 +110,7 @@ extern char cde_pseudo_root_dir[MAXPATHLEN];
 extern void CDE_init_options(void);
 extern void CDE_init_allow_paths(void);
 extern void CDE_load_environment_vars(void);
+extern FILE* CDE_copied_files_logfile;
 
 
 char* CDE_PACKAGE_DIR = NULL;
@@ -222,6 +223,7 @@ int exitval;
   fprintf(ofp, "  -l  : Use native dynamic linker on machine (less portable but more robust)\n");
   fprintf(ofp, "  -p  : Provenance mode (output a provenance.log file)\n");
   fprintf(ofp, "  -v  : Verbose mode (for debugging)\n");
+  fprintf(ofp, "  -c  : Print the order of files copied into the package in cde-copied-files.log\n");
   fprintf(ofp, "  -o <output dir> : Set a custom output directory instead of \"cde-package/\"\n");
 
 	exit(exitval);
@@ -812,12 +814,18 @@ main(int argc, char *argv[])
 		"a:A:e:o:O:s:S:u:E:i:I:")) != EOF) {
 		switch (c) {
 		case 'c':
+      // pgbovine - hijack for -c option
+      CDE_copied_files_logfile = fopen("cde-copied-files.log", "w");
+
+    /*
 			if (cflag == CFLAG_BOTH) {
 				fprintf(stderr, "%s: -c and -C are mutually exclusive options\n",
 					progname);
 				exit(1);
 			}
 			cflag = CFLAG_ONLY_STATS;
+    */
+
 			break;
 		case 'C':
 			if (cflag == CFLAG_ONLY_STATS) {
