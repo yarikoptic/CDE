@@ -395,15 +395,21 @@ void copy_file(char* src_filename, char* dst_filename) {
   //printf("COPY %s %s\n", src_filename, dst_filename);
 
   // do a full-on copy
-  EXITIF((inF = open(src_filename, O_RDONLY)) < 0);
+
+  inF = open(src_filename, O_RDONLY); // note that we might not have permission to open src_filename
   // create with permissive perms
   EXITIF((outF = open(dst_filename, O_WRONLY | O_CREAT, 0777)) < 0);
 
-  while ((bytes = read(inF, buf, sizeof(buf))) > 0) {
-    write(outF, buf, bytes);
+  if (inF >= 0) {
+    while ((bytes = read(inF, buf, sizeof(buf))) > 0) {
+      write(outF, buf, bytes);
+    }
+    close(inF);
+  }
+  else {
+    fprintf(stderr, "CDE WARNING: cannot copy contents of '%s', creating an empty file instead\n", src_filename);
   }
     
-  close(inF);
   close(outF);
 }
 
