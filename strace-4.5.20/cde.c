@@ -439,30 +439,7 @@ static void copy_file_into_cde_root(char* filename, char* child_current_pwd) {
     fprintf(CDE_copied_files_logfile, "%s\n", filename_abspath);
   }
 
-
   char* dst_path = prepend_cderoot(filename_abspath);
-
-
-  char create_blank = 0;
-
-  // see if filename_abspath has a prefix match in create_blankfile_prefix_paths:
-  int i;
-  for (i = 0; i < create_blankfile_prefix_paths_ind; i++) {
-    char* p = create_blankfile_prefix_paths[i];
-    if (strncmp(filename_abspath, p, strlen(p)) == 0) {
-      create_blank = 1;
-      break;
-    }
-  }
-
-  if (create_blank) {
-    // create an empty file for dst_path ...
-    int outF;
-    EXITIF((outF = open(dst_path, O_WRONLY | O_CREAT, 0777)) < 0);
-    close(outF);
-
-    goto done; // punt early!
-  }
 
 
   // this will NOT follow the symlink ...
@@ -508,22 +485,43 @@ static void copy_file_into_cde_root(char* filename, char* child_current_pwd) {
       //mkdir_recursive(dst_path, 1);
       make_mirror_dirs_in_cde_package(filename_abspath, 1);
 
-      // regular file, simple common case :)
-      // 1.) try a hard link for efficiency
-      // 2.) if that fails, then do a straight-up copy,
-      //     but do NOT follow symlinks
-      //
-      // EEXIST means the file already exists, which isn't
-      // really a hard link failure ...
-      if ((link(filename_abspath, dst_path) != 0) && (errno != EEXIST)) {
-        copy_file(filename_abspath, dst_path);
+
+      char create_blank = 0;
+
+      // see if filename_abspath has a prefix match in create_blankfile_prefix_paths:
+      int i;
+      for (i = 0; i < create_blankfile_prefix_paths_ind; i++) {
+        char* p = create_blankfile_prefix_paths[i];
+        if (strncmp(filename_abspath, p, strlen(p)) == 0) {
+          create_blank = 1;
+          break;
+        }
       }
 
-      // if it's a shared library, then heuristically try to grep
-      // through it to find whether it might dynamically load any other
-      // libraries (e.g., those for other CPU types that we can't pick
-      // up via strace)
-      find_and_copy_possible_dynload_libs(filename_abspath, child_current_pwd);
+      if (create_blank) {
+        // create an empty file for dst_path ...
+        int outF;
+        EXITIF((outF = open(dst_path, O_WRONLY | O_CREAT, 0777)) < 0);
+        close(outF);
+      }
+      else {
+        // regular file, simple common case :)
+        // 1.) try a hard link for efficiency
+        // 2.) if that fails, then do a straight-up copy,
+        //     but do NOT follow symlinks
+        //
+        // EEXIST means the file already exists, which isn't
+        // really a hard link failure ...
+        if ((link(filename_abspath, dst_path) != 0) && (errno != EEXIST)) {
+          copy_file(filename_abspath, dst_path);
+        }
+
+        // if it's a shared library, then heuristically try to grep
+        // through it to find whether it might dynamically load any other
+        // libraries (e.g., those for other CPU types that we can't pick
+        // up via strace)
+        find_and_copy_possible_dynload_libs(filename_abspath, child_current_pwd);
+      }
     }
     else if (S_ISDIR(filename_stat.st_mode)) { // directory or symlink to directory
       // do a "mkdir -p filename" after redirecting it into cde-root/
