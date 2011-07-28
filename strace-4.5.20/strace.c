@@ -1167,6 +1167,16 @@ main(int argc, char *argv[])
          don't know when the file gets read, so I'm not certain any of
          them are really a problem. */
 
+
+      fputs("\n# Copy BLANK versions of files starting with these prefixes into the package,\n", f);
+      fputs("# to preserve privacy.  cde-exec should use these blank versions rather than\n", f);
+      fputs("# ignoring them outright and using the versions on the target machine,\n", f);
+      fputs("# in order to avoid conflicts.  Also, notice that all variants of /etc/passwd*,\n", f);
+      fputs("# such as /etc/passwd.cache, are blanked out by these default settings.)\n", f);
+      fputs("create_blankfile_prefix=/etc/passwd\n", f);
+      fputs("create_blankfile_prefix=/etc/shadow\n", f);
+
+
       fputs("\n# These environment vars might lead to 'overfitting' and hinder portability\n", f);
       fputs("ignore_environment_var=DBUS_SESSION_BUS_ADDRESS\n", f);
       fputs("ignore_environment_var=ORBIT_SOCKETDIR\n", f);

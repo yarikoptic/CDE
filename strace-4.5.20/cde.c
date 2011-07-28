@@ -122,6 +122,8 @@ int ignore_envvars_ind = 0;
 struct PI process_ignores[50];
 int process_ignores_ind = 0;
 
+static char* create_blankfile_prefix_paths[100];
+static int create_blankfile_prefix_paths_ind = 0;
 
 // the absolute path to the cde-root/ directory, since that will be
 // where our fake filesystem starts. e.g., if cde_starting_pwd is
@@ -411,7 +413,7 @@ void copy_file(char* src_filename, char* dst_filename) {
   else {
     fprintf(stderr, "CDE WARNING: cannot copy contents of '%s', creating an empty file instead\n", src_filename);
   }
-    
+
   close(outF);
 }
 
@@ -437,7 +439,31 @@ static void copy_file_into_cde_root(char* filename, char* child_current_pwd) {
     fprintf(CDE_copied_files_logfile, "%s\n", filename_abspath);
   }
 
+
   char* dst_path = prepend_cderoot(filename_abspath);
+
+
+  char create_blank = 0;
+
+  // see if filename_abspath has a prefix match in create_blankfile_prefix_paths:
+  int i;
+  for (i = 0; i < create_blankfile_prefix_paths_ind; i++) {
+    char* p = create_blankfile_prefix_paths[i];
+    if (strncmp(filename_abspath, p, strlen(p)) == 0) {
+      create_blank = 1;
+      break;
+    }
+  }
+
+  if (create_blank) {
+    // create an empty file for dst_path ...
+    int outF;
+    EXITIF((outF = open(dst_path, O_WRONLY | O_CREAT, 0777)) < 0);
+    close(outF);
+
+    goto done; // punt early!
+  }
+
 
   // this will NOT follow the symlink ...
   struct stat filename_stat;
@@ -3237,6 +3263,10 @@ void CDE_add_ignore_envvar(char* p) {
   _add_to_array_internal(ignore_envvars, &ignore_envvars_ind, p, "ignore_envvars");
 }
 
+void CDE_add_create_blankfile_prefix_path(char* p) {
+  _add_to_array_internal(create_blankfile_prefix_paths, &create_blankfile_prefix_paths_ind, p, "create_blankfile_prefix_paths");
+}
+
 
 // initialize arrays based on the cde.options file, which has the grammar:
 //
@@ -3253,6 +3283,11 @@ void CDE_add_ignore_envvar(char* p) {
 // {
 //   process_ignore_prefix=<path prefix to ignore for the given process>
 // }
+//
+// On 2011-07-27, added support for making cde create BLANK versions of certain
+// files in the package (but not to have cde-exec ignore them),
+// with the following syntax:
+// create_blankfile_prefix=<path prefix to create blank files>
 void CDE_init_options() {
   memset(ignore_exact_paths,    0, sizeof(ignore_exact_paths));
   memset(ignore_prefix_paths,   0, sizeof(ignore_prefix_paths));
@@ -3262,6 +3297,8 @@ void CDE_init_options() {
   memset(redirect_substr_paths, 0, sizeof(redirect_substr_paths));
   memset(ignore_envvars,        0, sizeof(ignore_envvars));
   memset(process_ignores,       0, sizeof(process_ignores));
+  memset(create_blankfile_prefix_paths, 0, sizeof(create_blankfile_prefix_paths));
+
 
   ignore_exact_paths_ind = 0;
   ignore_prefix_paths_ind = 0;
@@ -3271,6 +3308,7 @@ void CDE_init_options() {
   redirect_substr_paths_ind = 0;
   ignore_envvars_ind = 0;
   process_ignores_ind = 0;
+  create_blankfile_prefix_paths_ind = 0;
 
   char in_braces = false;
 
@@ -3390,6 +3428,9 @@ void CDE_init_options() {
           }
           set_id = 9;
         }
+        else if (strcmp(p, "create_blankfile_prefix") == 0) {
+          set_id = 10;
+        }
         else {
           fprintf(stderr, "Fatal error in cde.options: unrecognized token '%s'\n", p);
           exit(1);
@@ -3460,6 +3501,9 @@ void CDE_init_options() {
               fprintf(stderr, "Fatal error in cde.options: more than 20 'process_ignore_prefix' entries\n");
               exit(1);
             }
+            break;
+          case 10:
+            CDE_add_create_blankfile_prefix_path(p);
             break;
           default:
             assert(0);
