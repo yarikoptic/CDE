@@ -6,6 +6,8 @@ from subprocess import call
 
 CDE_ROOT = '/cde-root'
 
+ignored_dirs_set = set()
+
 # returns a dict mapping extension name to frequency of occurrence
 def get_extensions_histogram(filelst):
   ret = defaultdict(int)
@@ -37,17 +39,19 @@ def get_cum_num_files_subdirs(dirname):
   return (num_files, num_subdirs)
 
 
-# parses log output as a result of running 'cde -l'
+# log_fn should be the filename of a log produced by running 'cde -c'
 def parse_log(log_fn):
   files = []
   for line in open(log_fn):
     line = line.strip()
 
-    # keep only the FIRST occurrence of a particular file
-    # (or not ... seems to work better if you actually keep ALL occurrences)
-    #if line in files: continue
+    # VERY IMPORTANT - get the REAL PATH after resolving all symlinks
+    rp = os.path.realpath(line)
 
-    files.append(line)
+    # experiment with only keeping the FIRST occurrence of each rp
+    #if rp in files: continue
+
+    files.append(rp)
 
   dirs_set = set(f for f in files if os.path.isdir(f))
   files = [e for e in files if e not in dirs_set] # filter out dirs
@@ -82,6 +86,10 @@ def run_cde2(package_dir, logfile):
 
   log_scores = parse_log(logfile)
 
+  for e in sorted(log_scores.keys()):
+    print e, log_scores[e]
+
+
   while True:
     dat = []
 
@@ -92,6 +100,8 @@ def run_cde2(package_dir, logfile):
 
       if not os.path.isdir(system_dir):
         print "WARNING:", system_dir, "is in package but not on system."
+
+      if system_dir in ignored_dirs_set: continue
 
       d = DirEntry()
 
@@ -106,7 +116,14 @@ def run_cde2(package_dir, logfile):
         d.log_score = 0
 
       d.cum_num_files, d.cum_num_subdirs = get_cum_num_files_subdirs(d.name)
-      d.cum_num_system_files, d.cum_num_system_subdirs =  get_cum_num_files_subdirs(d.system_dirname)
+
+      # system_dirname can be HUGE if it's a top-level directory, so SKIP analyzing it if it takes forever
+      try:
+        print 'Calling get_cum_num_files_subdirs("' + d.system_dirname + '")'
+        d.cum_num_system_files, d.cum_num_system_subdirs =  get_cum_num_files_subdirs(d.system_dirname)
+      except KeyboardInterrupt:
+        ignored_dirs_set.add(d.system_dirname)
+        continue
 
       # sum of squares to calculate 'euclidian distance'
       d.cum_score = 0
@@ -119,11 +136,12 @@ def run_cde2(package_dir, logfile):
       d.cum_score += pow(float(d.cum_num_files) / float(d.cum_num_system_files + 1), 2)
 
       # sub-directory coverage:
+      # TODO: nix this for now
 
       #try: d.cum_score += pow(float(d.cum_num_subdirs) / float(d.cum_num_system_subdirs), 2)
       #except ZeroDivisionError: pass
       # add by 1 to penalize small values:
-      d.cum_score += pow(float(d.cum_num_subdirs) / float(d.cum_num_system_subdirs + 1), 2)
+      #d.cum_score += pow(float(d.cum_num_subdirs) / float(d.cum_num_system_subdirs + 1), 2)
 
       # mean normalized occurrence order:
       d.cum_score += pow(d.log_score, 2)
@@ -137,6 +155,7 @@ def run_cde2(package_dir, logfile):
 
     # optional filter ... filter all sub-directories with LOWER scores
     # than their parents ... wow, this seems to be REALLY useful :)
+    '''
     filtered_dat = []
     for d in dat:
       reject = False
@@ -152,6 +171,7 @@ def run_cde2(package_dir, logfile):
         filtered_dat.append(d)
 
     dat = filtered_dat
+    '''
 
     for (i, d) in enumerate(dat):
       #if i >= 20: break
@@ -193,33 +213,5 @@ def run_cde2(package_dir, logfile):
     assert ret == 0
 
 
-# hard-code some test cases:
 if __name__ == "__main__":
-  if sys.argv[1] == 'abiword':
-    pkg_name = 'abiword-package'
-    logfile = 'cde-tests/abiword-copied-files.log'
-  elif sys.argv[1] == 'chrome':
-    pkg_name = 'chrome-package'
-    logfile = 'cde-tests/chrome-copied-files.log'
-  elif sys.argv[1] == 'firefox':
-    pkg_name = 'firefox-package'
-    logfile = 'cde-tests/firefox-copied-files.log'
-  elif sys.argv[1] == 'sudoku':
-    pkg_name = 'gnome-sudoku-package'
-    logfile = 'cde-tests/sudoku-copied-files.log'
-  elif sys.argv[1] == 'googleearth':
-    pkg_name = 'googleearth-package'
-    logfile = 'cde-tests/googleearth-copied-files.log'
-  elif sys.argv[1] == 'gimp':
-    pkg_name = 'gimp-package'
-    logfile = 'cde-tests/gimp-copied-files.log'
-  else:
-    assert False
-  
-  call(['rm', '-rf', pkg_name + '/'])
-  call(['tar', '-xf', 'cde-tests/%s.tar' % pkg_name])
-
-  run_cde2(pkg_name, logfile)
-
-  call(['rm', '-rf', pkg_name + '/']) # clean-up
-
+  run_cde2('cde-package/', 'cde-copied-files.log')
