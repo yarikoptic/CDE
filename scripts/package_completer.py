@@ -1,5 +1,12 @@
 # Script that interactively guides the user to completing a package
 
+# TODO: fix limitation with rsync NOT properly handling symlinks to absolute paths
+
+# TODO: the NUMBER of sub-directories contained in a directory (within
+# the package) might be a proxy for its "importance" and could be used
+# for ranking
+
+
 import os, sys, math
 from collections import defaultdict
 from subprocess import call
@@ -213,5 +220,94 @@ def run_cde2(package_dir, logfile):
     assert ret == 0
 
 
+# returns True if d.name either contains NO FILES or contains the complete set
+# of files in its corresponding d.system_dirname.
+# (this runs fine even if d.system_dirname contains a TON of files)
+def package_dir_is_full(d):
+  package_num_files = 0
+  for (dn, subdirs, files) in os.walk(d.name):
+    package_num_files += len(files)
+
+  # empty :)
+  if package_num_files == 0:
+    return True
+
+  system_num_files = 0
+  for (dn, subdirs, files) in os.walk(d.system_dirname):
+    system_num_files += len(files)
+    # this early return is VITAL, since d.system_dirname could contain a
+    # GIGANTIC number of files, and this function will run forever if not for
+    # early termination :)
+    if system_num_files > package_num_files:
+      return False
+
+  # full :)
+  return True
+
+
+
+def run_simple_package_completer(package_dir):
+  assert os.path.isdir(package_dir + CDE_ROOT)
+
+  while True:
+    dat = []
+
+    for (dirname, subdirs, files) in os.walk(package_dir):
+      if CDE_ROOT not in dirname: continue
+      system_dir = dirname[dirname.find(CDE_ROOT) + len(CDE_ROOT):]
+      if not system_dir: continue
+
+      if not os.path.isdir(system_dir):
+        print "WARNING:", system_dir, "is in package but not on system."
+
+      d = DirEntry()
+
+      d.name = dirname
+      d.system_dirname = system_dir
+
+      d.nesting_level = d.system_dirname.count('/')
+
+      if not package_dir_is_full(d):
+          dat.append(d)
+
+
+    for (i, d) in enumerate(dat):
+      print i + 1, ')\t' + d.system_dirname
+
+    print
+    print "Choose sub-directory to copy into package ('q' to quit):",
+    choice = raw_input()
+    if choice == 'q':
+      return
+    else:
+      choice = int(choice) - 1 # so we can be one-indexed for user-friendliness
+    selected = dat[choice]
+
+    # remember to put a trailing '/' to get rsync to work properly
+    #
+    # TODO: a problem with rsync is that if directories contain symlinks
+    # to absolute paths, the symlinks won't be properly re-written to
+    # point to the proper versions within cde-package/cde-root/
+    #
+    # see the code for create_symlink_in_cde_root() in cde.c for subtle
+    # details about how to copy symlinks into cde-package/cde-root/
+    #
+    # also look into 'man rsync' for these options, which might help:
+    #
+    # -l, --links                 copy symlinks as symlinks
+    # -L, --copy-links            transform symlink into referent file/dir
+    #     --copy-unsafe-links     only "unsafe" symlinks are transformed
+    #     --safe-links            ignore symlinks that point outside the tree
+    # -k, --copy-dirlinks         transform symlink to dir into referent dir
+    # -K, --keep-dirlinks         treat symlinked dir on receiver as dir
+    #
+    args = ['rsync', '-a', selected.system_dirname + '/', selected.name + '/']
+    print args
+    ret = call(args)
+    assert ret == 0
+
+
+
 if __name__ == "__main__":
-  run_cde2('cde-package/', 'cde-copied-files.log')
+  run_simple_package_completer(sys.argv[1])
+  #run_cde2('cde-package/', 'cde-copied-files.log')
