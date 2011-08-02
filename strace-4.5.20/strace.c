@@ -1176,10 +1176,12 @@ main(int argc, char *argv[])
       fputs("create_blankfile_prefix=/etc/passwd\n", f);
       fputs("create_blankfile_prefix=/etc/shadow\n", f);
 
-      fputs("\n# Sometimes programs crash when they try to access a blank password file,\n", f);
-      fputs("# so for those cases, try to access the target machine's version ...\n", f);
-      fputs("#ignore_prefix=/etc/passwd\n", f);
-      fputs("#ignore_prefix=/etc/shadow\n", f);
+      fputs("\n# Access the target machine's password files:\n", f);
+      fputs("# (some programs like texmacs need these lines to be commented-out,\n", f);
+      fputs("#  since they try to use home directory paths within the passwd file,\n", f);
+      fputs("#  and those paths might not exist within the package.)\n", f);
+      fputs("ignore_prefix=/etc/passwd\n", f);
+      fputs("ignore_prefix=/etc/shadow\n", f);
 
 
       fputs("\n# These environment vars might lead to 'overfitting' and hinder portability\n", f);

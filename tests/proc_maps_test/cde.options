@@ -1,5 +1,7 @@
 # cde.options v1 (do not alter this first line!)
 
+# Special cde.options file for proc_maps_test ... do NOT ignore /tmp
+
 # These directories often contain pseudo-files that shouldn't be tracked
 ignore_prefix=/dev/
 ignore_exact=/dev
@@ -13,39 +15,9 @@ ignore_prefix=/var/log/
 ignore_prefix=/var/run/
 ignore_prefix=/var/tmp/
 
-# un-comment the entries below if you think they might help your app:
-#ignore_exact=/etc/ld.so.cache
-#ignore_exact=/etc/ld.so.preload
-#ignore_exact=/etc/ld.so.nohwcap
-
-# Ignore .Xauthority to allow X Windows programs to work
-ignore_substr=.Xauthority
-
-# Ignore so that networking can work properly
-ignore_exact=/etc/resolv.conf
-# These files might be useful to ignore along with /etc/resolv.conf
-# (un-comment if you want to try them)
-#ignore_exact=/etc/host.conf
-#ignore_exact=/etc/hosts
-#ignore_exact=/etc/nsswitch.conf
-#ignore_exact=/etc/gai.conf
-
-# Copy BLANK versions of files starting with these prefixes into the package,
-# to preserve privacy.  cde-exec should use these blank versions rather than
-# ignoring them outright and using the versions on the target machine,
-# in order to avoid conflicts.  Also, notice that all variants of /etc/passwd*,
-# such as /etc/passwd.cache, are blanked out by these default settings.
 create_blankfile_prefix=/etc/passwd
 create_blankfile_prefix=/etc/shadow
 
-# Sometimes programs crash when they try to access a blank password file,
-# so for those cases, try to access the target machine's version ...
-#ignore_prefix=/etc/passwd
-#ignore_prefix=/etc/shadow
+ignore_prefix=/etc/passwd
+ignore_prefix=/etc/shadow
 
-# These environment vars might lead to 'overfitting' and hinder portability
-ignore_environment_var=DBUS_SESSION_BUS_ADDRESS
-ignore_environment_var=ORBIT_SOCKETDIR
-ignore_environment_var=SESSION_MANAGER
-ignore_environment_var=XAUTHORITY
-ignore_environment_var=DISPLAY
