@@ -7,12 +7,6 @@ CDE_EXEC = "/home/pgbovine/CDE/cde-exec"
 
 CDE_ROOT_DIR = 'cde-package/cde-root'
 
-# careful!!!
-def clear_cde_root():
-  os.system('rm -rf cde-package')
-  os.system('rm -f cde.options')
-  time.sleep(0.3) # to give os.system some time to work :)
-
 def generic_lib_checks():
   assert os.path.islink('cde-package/cde-root/lib/libc.so.6')
   assert os.readlink('cde-package/cde-root/lib/libc.so.6') == 'libc-2.8.so'
@@ -68,8 +62,16 @@ def run_and_cmp_cde_exec(argv, prev_stdout, prev_stderr):
     (stdout, stderr) = Popen(["rm", "-rf", tmp_test_rootdir], stdout=PIPE, stderr=PIPE).communicate()
 
 
-def generic_test_runner(argv, checker_func, skip_generic_lib_checks=False):
-  clear_cde_root()
+def generic_test_runner(argv, checker_func, skip_generic_lib_checks=False, clear_cde_options=True):
+  # careful!!!
+  os.system('rm -rf cde-package')
+
+  if clear_cde_options:
+    os.system('rm -f cde.options')
+
+  time.sleep(0.3) # to give os.system some time to work :)
+
+
   (stdout, stderr) = run_cde(argv)
 
   checker_func()
