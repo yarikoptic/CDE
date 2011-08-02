@@ -226,7 +226,38 @@ char* create_abspath_within_cderoot(char* path) {
   if (CDE_exec_mode) {
     // if we're making a cde-exec run, then simply re-route it
     // inside of cde_pseudo_root_dir
-    return format("%s%s", cde_pseudo_root_dir, path);
+
+    /* SUPER WEIRD special case: Sometimes 'path' will ALREADY BE within
+       cde_pseudo_root_dir, so in those cases, do NOT redirect it again.
+       Instead, simply strdup the original path (and maybe issue a warning).
+
+       This can happen if, say, the target program reads /proc/self/maps
+       or /proc/<pid>/maps and extracts the final field in a line, which
+       represents the filename of a file that's been mmapped into the
+       process's address space.  If we're running in cde-exec mode, then
+       the filename extracted from the maps 'pseudo-file' is actually an
+       absolute path WITHIN cde-root/.  e.g.,:
+
+       00754000-00755000 rw-p 00165000 08:01 85299      /home/pgbovine/cde-package/cde-root/bin/foo
+
+       If we try to blindly redirect this path within cde-root/ again,
+       we'll get something nonsensical like:
+
+       /home/pgbovine/cde-package/cde-root/home/pgbovine/cde-package/cde-root/bin/foo
+
+       To prevent such atrocities, we just do a simple check to see if a
+       path is already within cde-root/, and if so, then don't redirect it.
+      
+    */
+    if(strncmp(path, cde_pseudo_root_dir, strlen(cde_pseudo_root_dir)) == 0) {
+      // TODO: maybe print a warning to stderr or a log file?
+      //fprintf(stderr, "CDE WARNING: refusing to redirect path that's within cde-root/: '%s'", path);
+      return strdup(path);
+    }
+    else {
+      // normal behavior:
+      return format("%s%s", cde_pseudo_root_dir, path);
+    }
   }
   else {
     // if we're making an ORIGINAL (tracing) run, then simply prepend
