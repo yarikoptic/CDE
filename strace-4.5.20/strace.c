@@ -1172,9 +1172,14 @@ main(int argc, char *argv[])
       fputs("# to preserve privacy.  cde-exec should use these blank versions rather than\n", f);
       fputs("# ignoring them outright and using the versions on the target machine,\n", f);
       fputs("# in order to avoid conflicts.  Also, notice that all variants of /etc/passwd*,\n", f);
-      fputs("# such as /etc/passwd.cache, are blanked out by these default settings.)\n", f);
+      fputs("# such as /etc/passwd.cache, are blanked out by these default settings.\n", f);
       fputs("create_blankfile_prefix=/etc/passwd\n", f);
       fputs("create_blankfile_prefix=/etc/shadow\n", f);
+
+      fputs("\n# Sometimes programs crash when they try to access a blank password file,\n", f);
+      fputs("# so for those cases, try to access the target machine's version ...\n", f);
+      fputs("#ignore_prefix=/etc/passwd\n", f);
+      fputs("#ignore_prefix=/etc/shadow\n", f);
 
 
       fputs("\n# These environment vars might lead to 'overfitting' and hinder portability\n", f);
