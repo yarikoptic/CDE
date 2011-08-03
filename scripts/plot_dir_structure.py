@@ -41,8 +41,8 @@ for (d, subdirs, files) in os.walk(basedir):
         print filenode, '[label="%s", shape=diamond] /* %s */' % (get_canonical_name(p), p)
         already_rendered[filenode] = p
 
-      # symlinks get a dotted line!
-      print '%s->%s [style=dotted]' % (filenode, get_node_name(target))
+      # symlinks get a dashed line!
+      print '%s->%s [style=dashed]' % (filenode, get_node_name(target))
     else:
       if filenode not in already_rendered:
         already_rendered[filenode] = p
