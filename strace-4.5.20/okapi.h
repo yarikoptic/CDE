@@ -1,4 +1,17 @@
 /* 
+  
+okapi (pronounced "oh-copy") is a robust file copying utility for Linux
+that gracefully handles the utter grossness of symlinks and
+sub-directories.
+
+Created by Philip Guo on 2011-08-02
+
+okapi is currently included as a library within the CDE project.
+
+*/
+
+
+/* 
 
 CDE: Code, Data, and Environment packaging for Linux
 http://www.stanford.edu/~pgbovine/cde.html
@@ -19,8 +32,6 @@ CDE is currently licensed under GPL v3:
   GNU General Public License for more details.
 
 */
-
-// mini-library for manipulating file paths on UNIX-like systems
 
 #ifndef _PATHS_H
 #define _PATHS_H

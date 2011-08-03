@@ -41,7 +41,7 @@ CDE is currently licensed under GPL v3:
 */
 
 #include "cde.h"
-#include "paths.h"
+#include "okapi.h"
 #include <dirent.h>
 
 // for CDE_begin_socket_bind_or_connect

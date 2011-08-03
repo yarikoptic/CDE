@@ -1,4 +1,29 @@
 /* 
+  
+okapi (pronounced "oh-copy") is a robust file copying utility for Linux
+that gracefully handles the utter grossness of symlinks and
+sub-directories.
+
+Created by Philip Guo on 2011-08-02
+
+okapi is currently included as a library within the CDE project.
+
+To make a stand-alone okapi binary, compile with -DOKAPI_STANDALONE, e.g.,:
+
+To invoke, run:
+
+  okapi <path> <src_prefix> <dst_prefix>
+
+and okapi will copy $src_prefix/$path into $dst_prefix/$path, creating
+all necessary layers of symlinks and sub-directories along the way.
+$src_prefix may be "".
+
+Currently, all three input paths must be absolute paths.
+
+*/
+
+
+/* 
 
 CDE: Code, Data, and Environment packaging for Linux
 http://www.stanford.edu/~pgbovine/cde.html
@@ -20,9 +45,8 @@ CDE is currently licensed under GPL v3:
 
 */
 
-// mini-library for manipulating file paths on UNIX-like systems
+#include "okapi.h"
 
-#include "paths.h"
 
 // TODO: eliminate this hack if it results in a compile-time error
 #include "config.h" // to get I386 definition
@@ -772,4 +796,34 @@ void copy_file(char* src_filename, char* dst_filename) {
 
   close(outF);
 }
+
+
+#ifdef OKAPI_STANDALONE
+
+int main(int argc, char** argv) {
+  if (argc != 4) {
+    fprintf(stderr, "Error: okapi takes exactly 3 arguments\n");
+    return -1;
+  }
+  else {
+    if (!IS_ABSPATH(argv[1])) {
+      fprintf(stderr, "Error: '%s' is NOT an absolute path\n", argv[1]);
+      return -1;
+    }
+    // argv[2] can be ""
+    if ((strlen(argv[2]) > 0) && !IS_ABSPATH(argv[2])) {
+      fprintf(stderr, "Error: '%s' is NOT an absolute path\n", argv[2]);
+      return -1;
+    }
+    if (!IS_ABSPATH(argv[3])) {
+      fprintf(stderr, "Error: '%s' is NOT an absolute path\n", argv[3]);
+      return -1;
+    }
+
+    create_mirror_file(argv[1], argv[2], argv[3]);
+  }
+  return 0;
+}
+
+#endif
 
