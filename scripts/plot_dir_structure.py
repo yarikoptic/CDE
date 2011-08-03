@@ -1,16 +1,19 @@
 # traverses a directory tree and plots out the resulting directory
 # structure to stdout in GraphViz .dot format
 
-import os, sys, hashlib, collections
+# use inode numbers as unique node names (use os.lstat to NOT follow symlinks)
+
+import os, sys, collections
 
 basedir = os.path.realpath(sys.argv[1])
 
-# Key:   node name ('node_' + md5-hash)
+# Key:   node name ('node_' + inode number)
 # Value: full path
 already_rendered = {}
 
 def get_node_name(path):
-  return 'node_' + hashlib.md5(path).hexdigest()
+  # use lstat to NOT follow symlinks
+  return 'node_' + str(os.lstat(path).st_ino)
 
 def get_canonical_name(path):
   return path.split('/')[-1]
@@ -33,13 +36,13 @@ for (d, subdirs, files) in os.walk(basedir):
     print '%s->%s' % (dirnode, filenode)
 
     if os.path.islink(p):
-      target = os.path.realpath(os.path.join(d, os.readlink(p)))
+      target = os.path.normpath(os.path.join(d, os.readlink(p)))
       if filenode not in already_rendered:
         print filenode, '[label="%s", shape=diamond] /* %s */' % (get_canonical_name(p), p)
         already_rendered[filenode] = p
 
-      # symlinks get a dashed line!
-      print '%s->%s [style=dashed]' % (filenode, get_node_name(target))
+      # symlinks get a dotted line!
+      print '%s->%s [style=dotted]' % (filenode, get_node_name(target))
     else:
       if filenode not in already_rendered:
         already_rendered[filenode] = p
