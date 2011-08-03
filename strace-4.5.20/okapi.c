@@ -12,13 +12,11 @@ To make a stand-alone okapi binary, compile with -DOKAPI_STANDALONE, e.g.,:
 
 To invoke, run:
 
-  okapi <path> <src_prefix> <dst_prefix>
+  okapi <absolute_path> <src_prefix> <dst_prefix>
 
-and okapi will copy $src_prefix/$path into $dst_prefix/$path, creating
-all necessary layers of symlinks and sub-directories along the way.
+okapi will copy $src_prefix/$absolute_path into $dst_prefix/$absolute_path,
+creating all necessary layers of symlinks and sub-directories along the way.
 $src_prefix may be "".
-
-Currently, all three input paths must be absolute paths.
 
 */
 
@@ -802,25 +800,30 @@ void copy_file(char* src_filename, char* dst_filename) {
 
 int main(int argc, char** argv) {
   if (argc != 4) {
-    fprintf(stderr, "Error: okapi takes exactly 3 arguments\n");
+    fprintf(stderr, "Error, okapi takes exactly 3 arguments: <absolute_path>, <src_prefix>, <dst_prefix>\n");
     return -1;
   }
   else {
     if (!IS_ABSPATH(argv[1])) {
-      fprintf(stderr, "Error: '%s' is NOT an absolute path\n", argv[1]);
-      return -1;
-    }
-    // argv[2] can be ""
-    if ((strlen(argv[2]) > 0) && !IS_ABSPATH(argv[2])) {
-      fprintf(stderr, "Error: '%s' is NOT an absolute path\n", argv[2]);
-      return -1;
-    }
-    if (!IS_ABSPATH(argv[3])) {
-      fprintf(stderr, "Error: '%s' is NOT an absolute path\n", argv[3]);
+      fprintf(stderr, "Error, '%s' is NOT an absolute path\n", argv[1]);
       return -1;
     }
 
-    create_mirror_file(argv[1], argv[2], argv[3]);
+    char* src_prefix;
+    if (strlen(argv[2]) == 0) { // argv[2] can be ""
+      src_prefix = "";
+    }
+    else {
+      src_prefix = realpath_strdup(argv[2]);
+    }
+
+    if (strlen(argv[3]) == 0) {
+      fprintf(stderr, "Error, argv[3] cannot be empty\n");
+      return -1;
+    }
+    char* dst_prefix = realpath_strdup(argv[3]);
+
+    create_mirror_file(argv[1], src_prefix, dst_prefix);
   }
   return 0;
 }
