@@ -755,7 +755,7 @@ void copy_file(char* src_filename, char* dst_filename) {
   inF = open(src_filename, O_RDONLY); // note that we might not have permission to open src_filename
   // create with most permissive perms
   if ((outF = open(dst_filename, O_WRONLY | O_CREAT, 0777)) < 0) {
-    fprintf(stderr, "Fatal error in %s [%s:%d]\n", __FUNCTION__, __FILE__, __LINE__);
+    fprintf(stderr, "Error in copy_file: cannot create '%s'\n", dst_filename);
     exit(1);
   }
 
