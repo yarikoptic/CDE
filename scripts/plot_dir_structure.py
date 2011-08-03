@@ -1,10 +1,9 @@
 # traverses a directory tree and plots out the resulting directory
 # structure to stdout in GraphViz .dot format
 
-import os, sys, hashlib
+import os, sys, hashlib, collections
 
 basedir = os.path.realpath(sys.argv[1])
-pwd = os.getcwd()
 
 # Key:   node name ('node_' + md5-hash)
 # Value: full path
@@ -13,11 +12,9 @@ already_rendered = {}
 def get_node_name(path):
   return 'node_' + hashlib.md5(path).hexdigest()
 
-
 def get_canonical_name(path):
-  assert path.startswith(basedir)
-  #return path[len(basedir):]
   return path.split('/')[-1]
+
 
 print "digraph {"
 print 'rankdir="LR"'
@@ -32,6 +29,7 @@ for (d, subdirs, files) in os.walk(basedir):
     p = os.path.join(d, f)
     filenode = get_node_name(p)
 
+    # directory entries get a default solid line
     print '%s->%s' % (dirnode, filenode)
 
     if os.path.islink(p):
@@ -40,7 +38,8 @@ for (d, subdirs, files) in os.walk(basedir):
         print filenode, '[label="%s", shape=diamond] /* %s */' % (get_canonical_name(p), p)
         already_rendered[filenode] = p
 
-      print '%s->%s' % (filenode, get_node_name(target))
+      # symlinks get a dashed line!
+      print '%s->%s [style=dashed]' % (filenode, get_node_name(target))
     else:
       if filenode not in already_rendered:
         already_rendered[filenode] = p
@@ -49,6 +48,28 @@ for (d, subdirs, files) in os.walk(basedir):
         else:
           assert os.path.isdir(p)
           print filenode, '[label="%s", shape=box] /* %s */' % (get_canonical_name(p), p)
+
+
+# print subgraphs to enforce that all nodes on the same level have the same 'rank'
+hash_by_ranks = collections.defaultdict(list)
+
+for (hash, path) in already_rendered.iteritems():
+  rank = len(path.split('/'))
+  hash_by_ranks[rank].append(hash)
+
+print
+
+maxrank = 1
+for (rank, hashes) in hash_by_ranks.iteritems():
+  print '  subgraph {'
+  print '    rank=same'
+  #print '   ', rank
+  for h in hashes:
+    print '   ', h
+  print '  }'
+  maxrank = max(maxrank, rank)
+
+#print '->'.join([str(i) for i in range(1, maxrank+1)])
 
 print "}"
 
