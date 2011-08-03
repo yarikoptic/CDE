@@ -32,6 +32,8 @@ CDE is currently licensed under GPL v3:
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/param.h>
+#include <errno.h>
+#include <fcntl.h>
 
 //#define _GNU_SOURCE // for vasprintf (now we include _GNU_SOURCE in Makefile)
 #include <stdio.h>
@@ -82,5 +84,9 @@ struct path* new_path_from_relpath(char* relpath, char* base);
 char* path2str(struct path* path, int depth);
 void delete_path(struct path *path);
 
+void create_mirror_file(char* filename_abspath, char* src_prefix, char* dst_prefix);
+void create_mirror_dirs(char* original_abspath, char* src_prefix, char* dst_prefix, int pop_one);
+void create_mirror_symlink_and_target(char* filename_abspath, char* src_prefix, char* dst_prefix);
+void copy_file(char* src_filename, char* dst_filename);
 
 #endif // _PATHS_H
