@@ -24,8 +24,6 @@ CDE is currently licensed under GPL v3:
 
 #include "paths.h"
 
-extern char CDE_exec_mode;
-
 // TODO: eliminate this hack if it results in a compile-time error
 #include "config.h" // to get I386 definition
 #if defined (I386)
@@ -61,8 +59,6 @@ char* realpath_strdup(char* filename) {
 
 // mallocs a new string
 char* readlink_strdup(char* filename) {
-  assert(!CDE_exec_mode);
-
   char path[MAXPATHLEN];
   path[0] = '\0';
   int len = readlink(filename, path, sizeof path);
@@ -422,9 +418,9 @@ char* format(const char *format, ...) {
 }
 
 
-// emulate the functionality of "cp $src_prefix/$filename_abspath $dst_prefix/$filename_abspath",
+// emulate the functionality of:
+// "cp $src_prefix/$filename_abspath $dst_prefix/$filename_abspath",
 // creating all constituent sub-directories in the process.
-//
 //
 // ($src_prefix shouldn't be NULL; instead, use "" for an empty prefix.)
 //
@@ -452,7 +448,7 @@ void create_mirror_file(char* filename_abspath, char* src_prefix, char* dst_pref
     // 'stat' will follow the symlink ...
     if (stat(src_path, &src_path_stat)) {
       // be failure-oblivious here
-      fprintf(stderr, "CDE WARNING: target of '%s' symlink cannot be found\n", src_path);
+      fprintf(stderr, "WARNING: target of '%s' symlink cannot be found\n", src_path);
       goto done;
     }
   }
@@ -467,7 +463,6 @@ void create_mirror_file(char* filename_abspath, char* src_prefix, char* dst_pref
       // if the destination file exists and is newer than the original
       // filename, then don't do anything!
       if (dst_path_stat.st_mtime >= src_path_stat.st_mtime) {
-        //printf("PUNTED on %s\n", dst_path);
         goto done;
       }
     }
@@ -485,7 +480,6 @@ void create_mirror_file(char* filename_abspath, char* src_prefix, char* dst_pref
       // copying/hard-linking will later succeed
       create_mirror_dirs(filename_abspath, src_prefix, dst_prefix, 1);
 
-      // regular file, simple common case :)
       // 1.) try a hard link for efficiency
       // 2.) if that fails, then do a straight-up copy,
       //     but do NOT follow symlinks
@@ -495,42 +489,32 @@ void create_mirror_file(char* filename_abspath, char* src_prefix, char* dst_pref
       if ((link(src_path, dst_path) != 0) && (errno != EEXIST)) {
         copy_file(src_path, dst_path);
       }
-
-      // TODO: actually DON'T do this for now, since it's confusing and
-      // not that useful in practice ...
-      //
-      // if it's a shared library, then heuristically try to grep
-      // through it to find whether it might dynamically load any other
-      // libraries (e.g., those for other CPU types that we can't pick
-      // up via strace)
-      //find_and_copy_possible_dynload_libs(filename_abspath, child_current_pwd);
     }
     else if (S_ISDIR(src_path_stat.st_mode)) { // directory or symlink to directory
-      // do a "mkdir -p filename" after redirecting it into cde-root/
       create_mirror_dirs(filename_abspath, src_prefix, dst_prefix, 0);
     }
   }
 
 done:
+  free(src_path);
   free(dst_path);
 }
 
 
 // emulate the functionality of "mkdir -p $dst_prefix/$original_abspath",
 // creating all the corresponding 'mirror' directories within
-// $dst_prefix, but MAKING SURE TO CREATE DIRECTORY SYMLINKS
+// $dst_prefix, but making sure to create directory symlinks
 // when necessary if any path component of $src_prefix/$original_abspath
 // is a symlink.
 //
 // ($src_prefix shouldn't be NULL; instead, use "" for an empty prefix.)
 //
 // if pop_one is non-zero, then pop last element of original_abspath
-// before doing "mkdir -p".
+// before doing the "mkdir -p".
 void create_mirror_dirs(char* original_abspath, char* src_prefix, char* dst_prefix, int pop_one) {
+  assert(IS_ABSPATH(original_abspath));
   assert(IS_ABSPATH(dst_prefix));
 
-  // use a sneaky new_path_internal call so that we can accept relative
-  // paths in fullpath
   struct path* p = new_path_from_abspath(original_abspath);
 
   if (pop_one) {
@@ -576,7 +560,7 @@ void create_mirror_dirs(char* original_abspath, char* src_prefix, char* dst_pref
 
 
 // copy a symlink from $src_prefix/$filename_abspath into $dst_prefix/$filename_abspath,
-// and also copy over the symlink's target into $dst_prefix/.
+// and also copy over the symlink's target into $dst_prefix/ (tricky!!!)
 //
 // if $src_prefix/$filename_abspath is a symlink to an ABSOLUTE PATH,
 // then make $dst_prefix/$filename_abspath be a symlink to a RELATIVE
@@ -584,20 +568,33 @@ void create_mirror_dirs(char* original_abspath, char* src_prefix, char* dst_pref
 //
 // recursively handle cases where there are symlinks to other symlinks,
 // so that we need to create multiple levels of symlinks!
+//
+// Pre: $src_prefix/$filename_abspath is actually a symlink
 void create_mirror_symlink_and_target(char* filename_abspath, char* src_prefix, char* dst_prefix) {
   assert(IS_ABSPATH(filename_abspath));
   assert(IS_ABSPATH(dst_prefix));
 
+  int src_prefix_len = strlen(src_prefix);
+
   char* src_path = format("%s%s", src_prefix, filename_abspath);
   assert(IS_ABSPATH(src_path));
 
-  // target file must exist, so let's resolve its name
+  // Precondition check ...
+  struct stat src_path_stat;
+  if (lstat(src_path, &src_path_stat)) { // this will NOT follow the symlink ...
+    fprintf(stderr, "Fatal error in %s [%s:%d]\n", __FUNCTION__, __FILE__, __LINE__);
+    exit(1);
+  }
+  assert(S_ISLNK(src_path_stat.st_mode));
+
+
+  // target file must exist, so let's resolve its full path
   char* orig_symlink_target = readlink_strdup(src_path);
 
-  char* filename_abspath_copy = strdup(filename_abspath); // dirname() destroys its arg
-  char* dir = dirname(filename_abspath_copy);
+  char* src_path_copy = strdup(src_path); // dirname() destroys its arg
+  char* dir = dirname(src_path_copy);
   char* dir_realpath = realpath_strdup(dir);
-  free(filename_abspath_copy);
+  free(src_path_copy);
 
   char* dst_symlink_path = format("%s%s", dst_prefix, filename_abspath);
 
@@ -616,28 +613,38 @@ void create_mirror_symlink_and_target(char* filename_abspath, char* src_prefix, 
     // to insert in the original absolute path, in order to make the
     // symlink in the CDE package a RELATIVE path starting from
     // the $dst_prefix base directory
-    struct path* p = new_path_from_abspath(dir_realpath);
-    char tmp[MAXPATHLEN];
+
+    assert((strlen(dir_realpath) >= src_prefix_len) &&
+           (strncmp(dir_realpath, src_prefix, src_prefix_len) == 0));
+
+    char* dir_realpath_suffix = dir_realpath + src_prefix_len;
+    assert(IS_ABSPATH(dir_realpath_suffix));
+
+    struct path* p = new_path_from_abspath(dir_realpath_suffix);
+    char relative_symlink_target[MAXPATHLEN];
     if (p->depth > 0) {
-      strcpy(tmp, "..");
+      strcpy(relative_symlink_target, "..");
       int i;
       for (i = 1; i < p->depth; i++) {
-        strcat(tmp, "/..");
+        strcat(relative_symlink_target, "/..");
       }
     }
     else {
-      strcpy(tmp, "."); // simply use '.' if there are no nesting layers
+      strcpy(relative_symlink_target, "."); // simply use '.' if there are no nesting layers
     }
     delete_path(p);
 
-    strcat(tmp, orig_symlink_target);
+    assert((strlen(orig_symlink_target) >= src_prefix_len) &&
+           (strncmp(orig_symlink_target, src_prefix, src_prefix_len) == 0));
 
-    symlink(tmp, dst_symlink_path);
+    char* orig_symlink_target_suffix = orig_symlink_target + src_prefix_len;
+    assert(IS_ABSPATH(orig_symlink_target_suffix));
+    strcat(relative_symlink_target, orig_symlink_target_suffix);
+
+    symlink(relative_symlink_target, dst_symlink_path);
   }
   else {
     symlink_target_abspath = format("%s/%s", dir_realpath, orig_symlink_target);
-
-    // create a new identical symlink in cde-root/
     symlink(orig_symlink_target, dst_symlink_path);
   }
 
@@ -651,20 +658,17 @@ void create_mirror_symlink_and_target(char* filename_abspath, char* src_prefix, 
   // symlink_target_abspath should always start with src_prefix
   // (if src_prefix is "", then that's trivially true).
 
-  int src_prefix_len = strlen(src_prefix);
+  assert((strlen(symlink_target_abspath) >= src_prefix_len) &&
+         (strncmp(symlink_target_abspath, src_prefix, src_prefix_len) == 0));
 
-  char within_src_prefix =
-    ((strlen(symlink_target_abspath) >= src_prefix_len) &&
-     (strncmp(symlink_target_abspath, src_prefix, src_prefix_len) == 0));
-  assert(within_src_prefix);
-
-  // assert($symlink_target_abspath == $src_prefix + $symlink_target_abspath_suffix)
+  // $symlink_target_abspath == $src_prefix + $symlink_target_abspath_suffix
   char* symlink_target_abspath_suffix = symlink_target_abspath + src_prefix_len;
+  assert(IS_ABSPATH(symlink_target_abspath_suffix));
 
 
   struct stat symlink_target_stat;
   if (lstat(symlink_target_abspath, &symlink_target_stat)) { // lstat does NOT follow symlinks
-    fprintf(stderr, "CDE WARNING: symlink_target_abspath ('%s') cannot be found\n", symlink_target_abspath);
+    fprintf(stderr, "WARNING: symlink_target_abspath ('%s') cannot be found\n", symlink_target_abspath);
     return; // leads to memory leak, but oh well
   }
 
@@ -699,12 +703,11 @@ void create_mirror_symlink_and_target(char* filename_abspath, char* src_prefix, 
     // MUST DO IT IN THIS ORDER, OR IT WILL EXHIBIT SUBTLE BUGS!!!
     char* symlink_dst_original_path = canonicalize_abspath(symlink_target_abspath);
 
-    char within_src_prefix2 =
-      ((strlen(symlink_dst_original_path) >= src_prefix_len) &&
-       (strncmp(symlink_dst_original_path, src_prefix, src_prefix_len) == 0));
-    assert(within_src_prefix2);
+    assert((strlen(symlink_dst_original_path) >= src_prefix_len) &&
+           (strncmp(symlink_dst_original_path, src_prefix, src_prefix_len) == 0));
 
     char* symlink_dst_original_path_suffix = symlink_dst_original_path + src_prefix_len;
+    assert(IS_ABSPATH(symlink_dst_original_path_suffix));
 
     char* symlink_dst_abspath = format("%s%s", dst_prefix, symlink_dst_original_path_suffix);
 
@@ -715,26 +718,16 @@ void create_mirror_symlink_and_target(char* filename_abspath, char* src_prefix, 
       // symlink_dst_abspath if they don't yet exist
       create_mirror_dirs(symlink_dst_original_path_suffix, src_prefix, dst_prefix, 1);
 
-      // copy the target file over to cde-root/
       if ((link(symlink_target_abspath, symlink_dst_abspath) != 0) && (errno != EEXIST)) {
         copy_file(symlink_target_abspath, symlink_dst_abspath);
       }
-
-      // TODO: actually DON'T do this for now, since it's confusing and
-      // not that useful in practice ...
-      //
-      // if it's a shared library, then heuristically try to grep
-      // through it to find whether it might dynamically load any other
-      // libraries (e.g., those for other CPU types that we can't pick
-      // up via strace)
-      //find_and_copy_possible_dynload_libs(filename, child_current_pwd);
     }
     else if (S_ISDIR(symlink_target_stat.st_mode)) { // symlink to directory
       // make sure the target directory actually exists
       create_mirror_dirs(symlink_dst_original_path_suffix, src_prefix, dst_prefix, 0);
     }
     else {
-      fprintf(stderr, "CDE WARNING: create_symlink_in_cde_root('%s') has unknown target file type\n",
+      fprintf(stderr, "WARNING: create_mirror_symlink_and_target('%s') has unknown target file type\n",
               filename_abspath);
     }
 
@@ -774,7 +767,7 @@ void copy_file(char* src_filename, char* dst_filename) {
     close(inF);
   }
   else {
-    fprintf(stderr, "CDE WARNING: cannot copy contents of '%s', creating an empty file instead\n", src_filename);
+    fprintf(stderr, "WARNING: cannot copy contents of '%s', creating an empty file instead\n", src_filename);
   }
 
   close(outF);
