@@ -1,0 +1,17 @@
+okapi (pronounced "oh-copy") is a robust file copying utility for Linux
+that gracefully handles the utter grossness of symlinks and
+sub-directories.
+
+Created by Philip Guo on 2011-08-02
+
+---
+To invoke, simply run:
+
+  okapi <path> <src_prefix> <dst_prefix>
+
+It will copy $src_prefix/$path into $dst_prefix/$path, creating all
+necessary layers of symlinks and sub-directories along the way.
+$src_prefix may be "".
+
+ALL three input paths must be absolute paths.
+
