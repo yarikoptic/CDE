@@ -18,6 +18,11 @@ okapi will copy $src_prefix/$absolute_path into $dst_prefix/$absolute_path,
 creating all necessary layers of symlinks and sub-directories along the way.
 $src_prefix may be "".
 
+
+TODOs:
+  - support copying of file permissions and other metadata
+  - make explicit to the user that hard links are being used
+
 */
 
 
@@ -92,7 +97,9 @@ char* readlink_strdup(char* filename) {
 }
 
 
-// representing and manipulating path components (courtesy of Goanna)
+// representing and manipulating path components
+// (code courtesy of the Goanna project,
+//  http://tcos.org/project-goanna.html)
 
 static void empty_path(struct path *path) {
   int pos = 0;
@@ -325,32 +332,6 @@ char* path2str(struct path* path, int depth) {
 
   return ret;
 }
-
-
-// THIS FUNCTION IS DEPRECATED ...
-// use make_mirror_dirs_in_cde_package() instead
-#ifdef PGBOVINE_COMMENT
-// emulate "mkdir -p" functionality
-// if pop_one is non-zero, then pop last element
-// before doing "mkdir -p"
-void mkdir_recursive(char* fullpath, int pop_one) {
-  // use a sneaky new_path_internal call so that we can accept relative
-  // paths in fullpath
-  struct path* p = new_path_internal(fullpath, IS_ABSPATH(fullpath));
-
-  if (pop_one) {
-    path_pop(p); // e.g., ignore filename portion to leave just the dirname
-  }
-
-  int i;
-  for (i = 1; i <= p->depth; i++) {
-    char* dn = path2str(p, i);
-    mkdir(dn, 0777);
-    free(dn);
-  }
-  delete_path(p);
-}
-#endif // PGBOVINE_COMMENT
 
 
 // return 1 iff the absolute path of filename is within target_dir
