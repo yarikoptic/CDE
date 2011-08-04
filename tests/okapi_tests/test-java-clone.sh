@@ -20,5 +20,5 @@ pushd $CLONE2_DIR > /dev/null
 find . | xargs file | sort > contents.txt
 popd > /dev/null
 
-diff -u $CLONE1_DIR/contents.txt $TESTNAME.golden
-diff -u $CLONE2_DIR/contents.txt $TESTNAME.golden
+diff -u $CLONE1_DIR/contents.txt test-java.golden
+diff -u $CLONE2_DIR/contents.txt test-java.golden

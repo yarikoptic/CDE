@@ -441,7 +441,7 @@ void create_mirror_file(char* filename_abspath, char* src_prefix, char* dst_pref
   // this will NOT follow the symlink ...
   struct stat src_path_stat;
   if (lstat(src_path, &src_path_stat)) {
-    fprintf(stderr, "Fatal error in %s [%s:%d]\n", __FUNCTION__, __FILE__, __LINE__);
+    fprintf(stderr, "FATAL ERROR: lstat('%s') failed\n", src_path);
     exit(1);
   }
 
@@ -451,8 +451,10 @@ void create_mirror_file(char* filename_abspath, char* src_prefix, char* dst_pref
     // 'stat' will follow the symlink ...
     if (stat(src_path, &src_path_stat)) {
       // be failure-oblivious here
-      fprintf(stderr, "WARNING: target of '%s' symlink cannot be found\n", src_path);
-      goto done;
+      fprintf(stderr, "WARNING: the symlink '%s' has a non-existent target\n", src_path);
+
+      // DON'T PUNT HERE ... simply issue a warning and keep executing ...
+      //goto done;
     }
   }
 
@@ -585,7 +587,7 @@ void create_mirror_symlink_and_target(char* filename_abspath, char* src_prefix, 
   // Precondition check ...
   struct stat src_path_stat;
   if (lstat(src_path, &src_path_stat)) { // this will NOT follow the symlink ...
-    fprintf(stderr, "Fatal error in %s [%s:%d]\n", __FUNCTION__, __FILE__, __LINE__);
+    fprintf(stderr, "FATAL ERROR: lstat('%s') failed\n", src_path);
     exit(1);
   }
   assert(S_ISLNK(src_path_stat.st_mode));
@@ -671,8 +673,8 @@ void create_mirror_symlink_and_target(char* filename_abspath, char* src_prefix, 
 
   struct stat symlink_target_stat;
   if (lstat(symlink_target_abspath, &symlink_target_stat)) { // lstat does NOT follow symlinks
-    fprintf(stderr, "WARNING: symlink_target_abspath ('%s') cannot be found\n", symlink_target_abspath);
-    return; // leads to memory leak, but oh well
+    fprintf(stderr, "WARNING: '%s' (symlink target) does not exist\n", symlink_target_abspath);
+    goto done;
   }
 
   if (S_ISLNK(symlink_target_stat.st_mode)) {
@@ -738,6 +740,7 @@ void create_mirror_symlink_and_target(char* filename_abspath, char* src_prefix, 
     free(symlink_dst_original_path);
   }
 
+done:
   free(symlink_target_abspath);
   free(src_path);
 }
