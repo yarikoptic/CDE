@@ -2655,7 +2655,7 @@
 ./lib/modules/2.6.25-14.fc9.i686/kernel/net/netfilter/xt_esp.ko:                     ELF 32-bit LSB relocatable, Intel 80386, version 1 (SYSV), not stripped
 ./lib/modules/2.6.25-14.fc9.i686/kernel/net/netfilter/xt_hashlimit.ko:                      ELF 32-bit LSB relocatable, Intel 80386, version 1 (SYSV), not stripped
 ./lib/modules/2.6.25-14.fc9.i686/kernel/net/netfilter/xt_helper.ko:                  ELF 32-bit LSB relocatable, Intel 80386, version 1 (SYSV), not stripped
-./lib/modules/2.6.25-14.fc9.i686/kernel/net/netfilter/xt_iprange.ko:                        ELF 32-bit LSB relocatable, Intel 80386, version 1 (SYSV), not stripped
+./lib/modules/2.6.25-14.fc9.i686/kernel/net/netfilter/xt_iprange.ko:                 ELF 32-bit LSB relocatable, Intel 80386, version 1 (SYSV), not stripped
 ./lib/modules/2.6.25-14.fc9.i686/kernel/net/netfilter/xt_length.ko:                         ELF 32-bit LSB relocatable, Intel 80386, version 1 (SYSV), not stripped
 ./lib/modules/2.6.25-14.fc9.i686/kernel/net/netfilter/xt_limit.ko:                          ELF 32-bit LSB relocatable, Intel 80386, version 1 (SYSV), not stripped
 ./lib/modules/2.6.25-14.fc9.i686/kernel/net/netfilter/xt_mac.ko:                     ELF 32-bit LSB relocatable, Intel 80386, version 1 (SYSV), not stripped
@@ -2929,6 +2929,7 @@
 ./lib/modules/2.6.25-14.fc9.i686/vdso/vdso32-int80.so:                                      ELF 32-bit LSB shared object, Intel 80386, version 1 (SYSV), stripped
 ./lib/modules/2.6.25-14.fc9.i686/vdso/vdso32-sysenter.so:                                   ELF 32-bit LSB shared object, Intel 80386, version 1 (SYSV), stripped
 ./lib/modules/2.6.25-14.fc9.i686/weak-updates:                                       directory
+./lib/modules/2.6.25.9-76.fc9.i686/build:                                                     broken symbolic link to `../../../usr/src/kernels/2.6.25.9-76.fc9.i686'
 ./lib/modules/2.6.25.9-76.fc9.i686:                                                           directory
 ./lib/modules/2.6.25.9-76.fc9.i686/extra:                                                     directory
 ./lib/modules/2.6.25.9-76.fc9.i686/kernel/arch:                                             directory
@@ -4635,7 +4636,7 @@
 ./lib/modules/2.6.25.9-76.fc9.i686/kernel/net/ipv4/ipvs/ip_vs_lblc.ko:                      ELF 32-bit LSB relocatable, Intel 80386, version 1 (SYSV), not stripped
 ./lib/modules/2.6.25.9-76.fc9.i686/kernel/net/ipv4/ipvs/ip_vs_lblcr.ko:                       ELF 32-bit LSB relocatable, Intel 80386, version 1 (SYSV), not stripped
 ./lib/modules/2.6.25.9-76.fc9.i686/kernel/net/ipv4/ipvs/ip_vs_lc.ko:                        ELF 32-bit LSB relocatable, Intel 80386, version 1 (SYSV), not stripped
-./lib/modules/2.6.25.9-76.fc9.i686/kernel/net/ipv4/ipvs/ip_vs_nq.ko:                          ELF 32-bit LSB relocatable, Intel 80386, version 1 (SYSV), not stripped
+./lib/modules/2.6.25.9-76.fc9.i686/kernel/net/ipv4/ipvs/ip_vs_nq.ko:                        ELF 32-bit LSB relocatable, Intel 80386, version 1 (SYSV), not stripped
 ./lib/modules/2.6.25.9-76.fc9.i686/kernel/net/ipv4/ipvs/ip_vs_rr.ko:                        ELF 32-bit LSB relocatable, Intel 80386, version 1 (SYSV), not stripped
 ./lib/modules/2.6.25.9-76.fc9.i686/kernel/net/ipv4/ipvs/ip_vs_sed.ko:                       ELF 32-bit LSB relocatable, Intel 80386, version 1 (SYSV), not stripped
 ./lib/modules/2.6.25.9-76.fc9.i686/kernel/net/ipv4/ipvs/ip_vs_sh.ko:                        ELF 32-bit LSB relocatable, Intel 80386, version 1 (SYSV), not stripped
@@ -5042,6 +5043,7 @@
 ./lib/modules/2.6.25.9-76.fc9.i686/modules.seriomap:                                          ASCII text
 ./lib/modules/2.6.25.9-76.fc9.i686/modules.symbols:                                           ASCII text
 ./lib/modules/2.6.25.9-76.fc9.i686/modules.usbmap:                                            ASCII text
+./lib/modules/2.6.25.9-76.fc9.i686/source:                                                    broken symbolic link to `build'
 ./lib/modules/2.6.25.9-76.fc9.i686/updates:                                                   directory
 ./lib/modules/2.6.25.9-76.fc9.i686/vdso:                                                      directory
 ./lib/modules/2.6.25.9-76.fc9.i686/vdso/vdso32-int80.so:                                      ELF 32-bit LSB shared object, Intel 80386, version 1 (SYSV), stripped
