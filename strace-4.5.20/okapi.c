@@ -1,5 +1,5 @@
-/* 
-  
+/*
+
 okapi (pronounced "oh-copy") is a robust file copying utility for Linux
 that gracefully handles the utter grossness of symlinks and
 sub-directories.
@@ -20,13 +20,12 @@ $src_prefix may be "".
 
 
 TODOs:
-  - support copying of file permissions and other metadata
   - make explicit to the user that hard links are being used
 
 */
 
 
-/* 
+/*
 
 CDE: Code, Data, and Environment packaging for Linux
 http://www.stanford.edu/~pgbovine/cde.html
@@ -646,11 +645,15 @@ void create_mirror_symlink_and_target(char* filename_abspath, char* src_prefix, 
     assert(IS_ABSPATH(orig_symlink_target_suffix));
     strcat(relative_symlink_target, orig_symlink_target_suffix);
 
-    symlink(relative_symlink_target, dst_symlink_path);
+    if (symlink(relative_symlink_target, dst_symlink_path) != 0) {
+      fprintf(stderr, "WARNING: symlink('%s', '%s') failed\n", relative_symlink_target, dst_symlink_path);
+    }
   }
   else {
     symlink_target_abspath = format("%s/%s", dir_realpath, orig_symlink_target);
-    symlink(orig_symlink_target, dst_symlink_path);
+    if (symlink(orig_symlink_target, dst_symlink_path) != 0) {
+      fprintf(stderr, "WARNING: symlink('%s', '%s') failed\n", orig_symlink_target, dst_symlink_path);
+    }
   }
 
   assert(symlink_target_abspath);
@@ -758,9 +761,16 @@ void copy_file(char* src_filename, char* dst_filename) {
 
   // do a full-on copy
 
+  int perms = 0777; // default to most liberal permissions ...
+
+  struct stat src_stat;
+  if (lstat(src_filename, &src_stat) == 0) {
+    perms = src_stat.st_mode; // specialize to match perms of src_filename
+  }
+
   inF = open(src_filename, O_RDONLY); // note that we might not have permission to open src_filename
   // create with most permissive perms
-  if ((outF = open(dst_filename, O_WRONLY | O_CREAT, 0777)) < 0) {
+  if ((outF = open(dst_filename, O_WRONLY | O_CREAT, perms)) < 0) {
     fprintf(stderr, "Error in copy_file: cannot create '%s'\n", dst_filename);
     exit(1);
   }
@@ -783,6 +793,9 @@ void copy_file(char* src_filename, char* dst_filename) {
 #ifdef OKAPI_STANDALONE
 
 int main(int argc, char** argv) {
+  // allow most promiscuous permissions for new files/directories
+  umask(0000);
+
   if (argc != 4) {
     fprintf(stderr, "Error, okapi takes exactly 3 arguments: <absolute_path>, <src_prefix>, <dst_prefix>\n");
     return -1;
@@ -813,4 +826,3 @@ int main(int argc, char** argv) {
 }
 
 #endif
-
