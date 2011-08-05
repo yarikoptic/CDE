@@ -491,7 +491,7 @@ void create_mirror_file(char* filename_abspath, char* src_prefix, char* dst_pref
       // EEXIST means the file already exists, which isn't
       // really a hard link failure ...
       if ((link(src_path, dst_path) != 0) && (errno != EEXIST)) {
-        copy_file(src_path, dst_path);
+        copy_file(src_path, dst_path, 0);
       }
     }
     else if (S_ISDIR(src_path_stat.st_mode)) { // directory or symlink to directory
@@ -729,7 +729,7 @@ void create_mirror_symlink_and_target(char* filename_abspath, char* src_prefix, 
       create_mirror_dirs(symlink_dst_original_path_suffix, src_prefix, dst_prefix, 1);
 
       if ((link(symlink_target_abspath, symlink_dst_abspath) != 0) && (errno != EEXIST)) {
-        copy_file(symlink_target_abspath, symlink_dst_abspath);
+        copy_file(symlink_target_abspath, symlink_dst_abspath, 0);
       }
     }
     else if (S_ISDIR(symlink_target_stat.st_mode)) { // symlink to directory
@@ -751,9 +751,12 @@ done:
 }
 
 
-// do a straight-up binary copy of $src_filename into $dst_filename
+// do a straight-up binary copy of $src_filename into $dst_filename.
+// if perms == 0, then dst_filename will acquire the SAME file
+// permissions as src_filename.  Otherwise, dst_filename will have
+// its permissions set to perms.
 // note that this WILL follow symlinks
-void copy_file(char* src_filename, char* dst_filename) {
+void copy_file(char* src_filename, char* dst_filename, int perms) {
   int inF;
   int outF;
   int bytes;
@@ -763,15 +766,21 @@ void copy_file(char* src_filename, char* dst_filename) {
 
   // do a full-on copy
 
-  int perms = 0777; // default to most liberal permissions ...
-
-  struct stat src_stat;
-  if (lstat(src_filename, &src_stat) == 0) {
-    perms = src_stat.st_mode; // specialize to match perms of src_filename
+  if (perms == 0) {
+    // match perms of src_filename
+    struct stat src_stat;
+    if (lstat(src_filename, &src_stat) == 0) {
+      perms = src_stat.st_mode;
+    }
   }
 
+  // default to most liberal permissions if stat failed ...
+  if (perms == 0) {
+    perms = 0777;
+  }
+
+
   inF = open(src_filename, O_RDONLY); // note that we might not have permission to open src_filename
-  // create with most permissive perms
   if ((outF = open(dst_filename, O_WRONLY | O_CREAT, perms)) < 0) {
     fprintf(stderr, "Error in copy_file: cannot create '%s'\n", dst_filename);
     exit(1);

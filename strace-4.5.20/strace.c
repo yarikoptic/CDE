@@ -98,7 +98,7 @@ extern char CDE_verbose_mode; // -v option
 extern char CDE_use_linker_from_package; // ON by default, -l option to turn OFF
 extern void alloc_tcb_CDE_fields(struct tcb* tcp);
 extern void free_tcb_CDE_fields(struct tcb* tcp);
-extern void copy_file(char* src_filename, char* dst_filename);
+extern void copy_file(char* src_filename, char* dst_filename, int perms);
 extern void strcpy_redirected_cderoot(char* dst, char* src);
 extern void CDE_create_path_symlink_dirs(void);
 extern void CDE_create_toplevel_symlink_dirs(void);
@@ -1213,7 +1213,7 @@ main(int argc, char *argv[])
     // use /proc/self/exe since argv[0] might be simply 'cde'
     // (if the cde binary is in $PATH and we're invoking it only by its name)
     char* fn = format("%s/cde-exec", CDE_PACKAGE_DIR);
-    copy_file("/proc/self/exe", fn);
+    copy_file("/proc/self/exe", fn, 0777);
     free(fn);
 
     CDE_create_convenience_scripts(argv, optind);
@@ -1249,7 +1249,7 @@ main(int argc, char *argv[])
 
     // copy /proc/self/environ to capture the FULL set of environment vars
     char* fullenviron_fn = format("%s/cde.full-environment", CDE_PACKAGE_DIR);
-    copy_file("/proc/self/environ", fullenviron_fn);
+    copy_file("/proc/self/environ", fullenviron_fn, 0666);
     free(fullenviron_fn);
   }
 

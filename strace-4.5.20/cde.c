@@ -2928,7 +2928,7 @@ void CDE_init_options() {
     // if found, copy it into the package
     if (f) {
       char* fn = format("%s/cde.options", CDE_PACKAGE_DIR);
-      copy_file("cde.options", fn);
+      copy_file("cde.options", fn, 0666);
       free(fn);
     }
     else {
