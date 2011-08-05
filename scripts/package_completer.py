@@ -2,6 +2,11 @@
 
 # TODO: fix limitation with rsync NOT properly handling symlinks to absolute paths
 
+# TODO: refactor to use subprocess.call(['okapi', ...]) rather than
+# rsync, since okapi gracefully handles symlinks.  Use os.walk() to walk
+# through a directory structure and use okapi to copy all constituents
+# into the package.
+
 # TODO: the NUMBER of sub-directories contained in a directory (within
 # the package) might be a proxy for its "importance" and could be used
 # for ranking
