@@ -111,11 +111,12 @@ extern void CDE_init_options(void);
 extern void CDE_init_allow_paths(void);
 extern void CDE_load_environment_vars(void);
 extern FILE* CDE_copied_files_logfile;
+#include "okapi.h"
 
 
+// only valid if !CDE_exec_mode
 char* CDE_PACKAGE_DIR = NULL;
 char* CDE_ROOT_DIR = NULL;
-int CDE_ROOT_LEN = -1;
 
 
 int debug = 0, followfork = 1; // pgbovine - turn on followfork by default
@@ -1032,18 +1033,6 @@ main(int argc, char *argv[])
   getcwd(cde_starting_pwd, sizeof cde_starting_pwd);
 
 
-  if (!CDE_PACKAGE_DIR) { // if it hasn't been set by the '-o' option, set to a default
-    CDE_PACKAGE_DIR = "cde-package";
-  }
-  CDE_ROOT_DIR = calloc(strlen(CDE_PACKAGE_DIR) + 1 + strlen(CDE_ROOT_NAME) + 1,
-                        sizeof *CDE_ROOT_DIR);
-  strcpy(CDE_ROOT_DIR, CDE_PACKAGE_DIR);
-  strcat(CDE_ROOT_DIR, "/");
-  strcat(CDE_ROOT_DIR, CDE_ROOT_NAME);
-
-  CDE_ROOT_LEN = strlen(CDE_ROOT_DIR);
- 
-
   // pgbovine - allow most promiscuous permissions for new files/directories
   umask(0000);
 
@@ -1061,8 +1050,21 @@ main(int argc, char *argv[])
   else {
     CDE_exec_mode = 0;
 
+    if (!CDE_PACKAGE_DIR) { // if it hasn't been set by the '-o' option, set to a default
+      CDE_PACKAGE_DIR = "cde-package";
+    }
+
+    // make this an absolute path!
+    CDE_PACKAGE_DIR = canonicalize_path(CDE_PACKAGE_DIR, cde_starting_pwd);
+    CDE_ROOT_DIR = format("%s/%s", CDE_PACKAGE_DIR, CDE_ROOT_NAME);
+    assert(IS_ABSPATH(CDE_ROOT_DIR));
+
     mkdir(CDE_PACKAGE_DIR, 0777);
     mkdir(CDE_ROOT_DIR, 0777);
+
+    //printf("CDE_PACKAGE_DIR: %s\n", CDE_PACKAGE_DIR);
+    //printf("CDE_ROOT_DIR: %s\n", CDE_ROOT_DIR);
+
 
     // if we can't even create CDE_ROOT_DIR, then abort with a failure
     struct stat cde_rootdir_stat;
@@ -1167,15 +1169,6 @@ main(int argc, char *argv[])
          don't know when the file gets read, so I'm not certain any of
          them are really a problem. */
 
-
-      fputs("\n# Copy BLANK versions of files starting with these prefixes into the package,\n", f);
-      fputs("# to preserve privacy.  cde-exec should use these blank versions rather than\n", f);
-      fputs("# ignoring them outright and using the versions on the target machine,\n", f);
-      fputs("# in order to avoid conflicts.  Also, notice that all variants of /etc/passwd*,\n", f);
-      fputs("# such as /etc/passwd.cache, are blanked out by these default settings.\n", f);
-      fputs("create_blankfile_prefix=/etc/passwd\n", f);
-      fputs("create_blankfile_prefix=/etc/shadow\n", f);
-
       fputs("\n# Access the target machine's password files:\n", f);
       fputs("# (some programs like texmacs need these lines to be commented-out,\n", f);
       fputs("#  since they try to use home directory paths within the passwd file,\n", f);
@@ -1214,7 +1207,7 @@ main(int argc, char *argv[])
     CDE_load_environment_vars();
   }
   else {
-    // pgbovine - copy 'cde' executable to $CDE_PACKAGE_DIR and rename
+    // pgbovine - copy 'cde' executable to CDE_PACKAGE_DIR and rename
     // it 'cde-exec', so that it can be included in the executable
     //
     // use /proc/self/exe since argv[0] might be simply 'cde'

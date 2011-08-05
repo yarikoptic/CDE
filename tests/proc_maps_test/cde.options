@@ -15,9 +15,6 @@ ignore_prefix=/var/log/
 ignore_prefix=/var/run/
 ignore_prefix=/var/tmp/
 
-create_blankfile_prefix=/etc/passwd
-create_blankfile_prefix=/etc/shadow
-
 ignore_prefix=/etc/passwd
 ignore_prefix=/etc/shadow
 

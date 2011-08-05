@@ -85,7 +85,6 @@ static char cde_options_initialized = 0; // set to 1 after CDE_init_options() do
 
 static void begin_setup_shmat(struct tcb* tcp);
 static void* find_free_addr(int pid, int exec, unsigned long size);
-static void find_and_copy_possible_dynload_libs(char* filename, char* child_current_pwd);
 
 static char* strcpy_from_child(struct tcb* tcp, long addr);
 static int ignore_path(char* filename, struct tcb* tcp);
@@ -94,7 +93,6 @@ static int ignore_path(char* filename, struct tcb* tcp);
 
 static char* redirect_filename_into_cderoot(char* filename, char* child_current_pwd, struct tcb* tcp);
 static void memcpy_to_child(int pid, char* dst_child, char* src, int size);
-static void create_symlink_in_cde_root(char* filename, char* child_current_pwd);
 
 
 // the true pwd of the cde executable AT THE START of execution
@@ -123,8 +121,6 @@ int ignore_envvars_ind = 0;
 struct PI process_ignores[50];
 int process_ignores_ind = 0;
 
-static char* create_blankfile_prefix_paths[100];
-static int create_blankfile_prefix_paths_ind = 0;
 
 // the absolute path to the cde-root/ directory, since that will be
 // where our fake filesystem starts. e.g., if cde_starting_pwd is
@@ -205,19 +201,12 @@ static char* extract_sandboxed_pwd(char* real_pwd, struct tcb* tcp) {
 }
 
 
-// prepend $CDE_ROOT_DIR to the given path string, assumes that the string
+// prepend CDE_ROOT_DIR to the given path string, assumes that the string
 // starts with '/' (i.e., it's an absolute path)
-//
-// this could return either a relative or an absolute path, depending
-// on whether CDE_ROOT_DIR is a relative or absolute path, respectively
-//
-// mallocs a new string!
+// (mallocs a new string)
 char* prepend_cderoot(char* path) {
   assert(IS_ABSPATH(path));
-  char* ret = malloc(CDE_ROOT_LEN + strlen(path) + 1);
-  strcpy(ret, CDE_ROOT_DIR);
-  strcat(ret, path);
-  return ret;
+  return format("%s%s", CDE_ROOT_DIR, path);
 }
 
 // WARNING: this function behaves differently depending on value of CDE_exec_mode
@@ -278,46 +267,14 @@ char* create_abspath_within_cderoot(char* path) {
 }
 
 
+
 // original_abspath must be an absolute path
 // create all the corresponding 'mirror' directories within
 // cde-package/cde-root/, MAKING SURE TO CREATE DIRECTORY SYMLINKS
 // when necessary (sort of emulate "mkdir -p" functionality)
 // if pop_one is non-zero, then pop last element before doing "mkdir -p"
 static void make_mirror_dirs_in_cde_package(char* original_abspath, int pop_one) {
-  // use a sneaky new_path_internal call so that we can accept relative
-  // paths in fullpath
-  struct path* p = new_path_from_abspath(original_abspath);
-
-  if (pop_one) {
-    path_pop(p); // e.g., ignore filename portion to leave just the dirname
-  }
-
-  int i;
-  for (i = 1; i <= p->depth; i++) {
-    char* dn = path2str(p, i);
-    char* dn_within_package = prepend_cderoot(dn);
-
-    // only do this if dn_within_package doesn't already exist
-    // (to prevent possible infinite loops)
-    struct stat already_exists_stat;
-    if (lstat(dn_within_package, &already_exists_stat) != 0) {
-      struct stat dn_stat;
-      if (lstat(dn, &dn_stat) == 0) { // this does NOT follow the symlink
-        char is_symlink = S_ISLNK(dn_stat.st_mode);
-        if (is_symlink) {
-          create_symlink_in_cde_root(dn, NULL);
-        }
-        else {
-          assert(S_ISDIR(dn_stat.st_mode));
-          mkdir(dn_within_package, 0777);
-        }
-      }
-    }
-
-    free(dn_within_package);
-    free(dn);
-  }
-  delete_path(p);
+  create_mirror_dirs(original_abspath, "", CDE_ROOT_DIR, pop_one);
 }
 
 
@@ -420,8 +377,8 @@ static int ignore_path(char* filename, struct tcb* tcp) {
 }
 
 
-// this is the meaty and super-complicated function that copies a file
-// into its respective location within cde-root/
+// copies a file into its respective location within cde-root/,
+// creating all necessary intermediate sub-directories and symlinks
 //
 // if filename is a symlink, then copy both it AND its target into cde-root
 static void copy_file_into_cde_root(char* filename, char* child_current_pwd) {
@@ -442,99 +399,8 @@ static void copy_file_into_cde_root(char* filename, char* child_current_pwd) {
     fprintf(CDE_copied_files_logfile, "%s\n", filename_abspath);
   }
 
-  char* dst_path = prepend_cderoot(filename_abspath);
+  create_mirror_file(filename_abspath, "", CDE_ROOT_DIR);
 
-
-  // this will NOT follow the symlink ...
-  struct stat filename_stat;
-  EXITIF(lstat(filename_abspath, &filename_stat));
-  char is_symlink = S_ISLNK(filename_stat.st_mode);
-
-  if (is_symlink) {
-    // 'stat' will follow the symlink ...
-    if (stat(filename_abspath, &filename_stat)) {
-      // be failure-oblivious here
-      fprintf(stderr, "CDE WARNING: target of '%s' symlink cannot be found\n", filename_abspath);
-      goto done;
-    }
-  }
-
-  // by now, filename_stat contains the info for the actual target file,
-  // NOT a symlink to it
-
-  if (S_ISREG(filename_stat.st_mode)) { // regular file or symlink to regular file
-    // lazy optimization to avoid redundant copies ...
-    struct stat dst_path_stat;
-    if (stat(dst_path, &dst_path_stat) == 0) {
-      // if the destination file exists and is newer than the original
-      // filename, then don't do anything!
-      if (dst_path_stat.st_mtime >= filename_stat.st_mtime) {
-        //printf("PUNTED on %s\n", dst_path);
-        goto done;
-      }
-    }
-  }
-
-  // finally, 'copy' filename_abspath over to dst_path
-
-  // if it's a symlink, copy both it and its target
-  if (is_symlink) {
-    create_symlink_in_cde_root(filename, child_current_pwd);
-  }
-  else {
-    if (S_ISREG(filename_stat.st_mode)) { // regular file
-      // create all the directories leading up to it, to make sure file
-      // copying/hard-linking will later succeed
-      //mkdir_recursive(dst_path, 1);
-      make_mirror_dirs_in_cde_package(filename_abspath, 1);
-
-
-      char create_blank = 0;
-
-      // see if filename_abspath has a prefix match in create_blankfile_prefix_paths:
-      int i;
-      for (i = 0; i < create_blankfile_prefix_paths_ind; i++) {
-        char* p = create_blankfile_prefix_paths[i];
-        if (strncmp(filename_abspath, p, strlen(p)) == 0) {
-          create_blank = 1;
-          break;
-        }
-      }
-
-      if (create_blank) {
-        // create an empty file for dst_path ...
-        int outF;
-        EXITIF((outF = open(dst_path, O_WRONLY | O_CREAT, 0777)) < 0);
-        close(outF);
-      }
-      else {
-        // regular file, simple common case :)
-        // 1.) try a hard link for efficiency
-        // 2.) if that fails, then do a straight-up copy,
-        //     but do NOT follow symlinks
-        //
-        // EEXIST means the file already exists, which isn't
-        // really a hard link failure ...
-        if ((link(filename_abspath, dst_path) != 0) && (errno != EEXIST)) {
-          copy_file(filename_abspath, dst_path);
-        }
-
-        // if it's a shared library, then heuristically try to grep
-        // through it to find whether it might dynamically load any other
-        // libraries (e.g., those for other CPU types that we can't pick
-        // up via strace)
-        find_and_copy_possible_dynload_libs(filename_abspath, child_current_pwd);
-      }
-    }
-    else if (S_ISDIR(filename_stat.st_mode)) { // directory or symlink to directory
-      // do a "mkdir -p filename" after redirecting it into cde-root/
-      //mkdir_recursive(dst_path, 0);
-      make_mirror_dirs_in_cde_package(filename_abspath, 0);
-    }
-  }
-
-done:
-  free(dst_path);
   free(filename_abspath);
 }
 
@@ -544,126 +410,6 @@ extern int isprint(int c);
 extern int isspace(int c);
 
 #define STRING_ISGRAPHIC(c) ( ((c) == '\t' || (isascii (c) && isprint (c))) )
-
-/* If filename is an ELF binary file, then do a binary grep through it
-   looking for strings that might be '.so' files, as well as dlopen*,
-   which is a function call to dynamically load an .so file.  Find
-   whether any of the .so files exist in the same directory as filename,
-   and if so, COPY them into cde-root/ as well.
-
-   The purpose of this hack is to pick up on libraries for alternative
-   CPU types that weren't picked up when running on this machine.  When
-   the package is ported to another machine, the program might load one
-   of these alternative libraries.
-  
-   Note that this heuristic might lead to false positives (incidental
-   matches) and false negatives (cannot find dynamically-generated
-   strings).  
-  
-   code adapted from the string program (strings.c) in GNU binutils */
-static void find_and_copy_possible_dynload_libs(char* filename, char* child_current_pwd) {
-  FILE* f = fopen(filename, "rb"); // open in binary mode
-  if (!f) {
-    return;
-  }
-
-  char header[5];
-  memset(header, 0, sizeof(header));
-  fgets(header, 5, f); // 5 means 4 bytes + 1 null terminating byte
-
-  // if it's not even an ELF binary, then punt early for efficiency
-  if (strcmp(header, "\177ELF") != 0) {
-    //printf("Sorry, not ELF %s\n", filename);
-    fclose(f);
-    return;
-  }
-
-  int i;
-  int dlopen_found = 0; // did we find a symbol starting with 'dlopen'?
-
-  char cur_string[MAXPATHLEN];
-  cur_string[0] = '\0';
-  int cur_ind = 0;
-
-  // it's unrealistic to expect more than 50, right???
-  char* libs_to_check[50];
-  int libs_to_check_ind = 0;
-
-  while (1) {
-
-    while (1) {
-      int c = getc(f);
-      if (c == EOF)
-        goto done;
-      if (!STRING_ISGRAPHIC(c))
-        break;
-
-      // don't overflow ... just truncate off of end
-      if (cur_ind < sizeof(cur_string) - 1) {
-        cur_string[cur_ind++] = c;
-      }
-    }
-
-    // done with a string
-    cur_string[cur_ind] = '\0';
-
-    int cur_strlen = strlen(cur_string);
-
-    // don't even bother for short strings:
-    if (cur_strlen >= 4) {
-      // check that it ends with '.so'
-      if ((cur_string[cur_strlen - 3] == '.') &&
-          (cur_string[cur_strlen - 2] == 's') &&
-          (cur_string[cur_strlen - 1] == 'o')) {
-
-        libs_to_check[libs_to_check_ind++] = strdup(cur_string);
-        assert(libs_to_check_ind < 50); // bounds check
-      }
-
-      if (strncmp(cur_string, "dlopen", 6) == 0) {
-        dlopen_found = 1;
-      }
-    }
-
-    // reset buffer
-    cur_string[0] = '\0';
-    cur_ind = 0;
-  }
-
-
-done:
-  // for efficiency and to prevent false positives,
-  // only do filesystem checks if dlopen has been found
-  if (dlopen_found) {
-    char* filename_copy = strdup(filename); // dirname() destroys its arg
-    char* dn = dirname(filename_copy);
-
-    for (i = 0; i < libs_to_check_ind; i++) {
-      char* lib_fullpath = format("%s/%s", dn, libs_to_check[i]);
-      // if the target library exists, then copy it into our package
-      struct stat st;
-      if (stat(lib_fullpath, &st) == 0) {
-        //printf("%s %s\n", filename, lib_fullpath);
-
-        // this COULD recursively call
-        // find_and_copy_possible_dynload_libs(), but it won't infinite
-        // loop if we activate the optimization where we punt if the
-        // file already exists and hasn't been updated:
-        copy_file_into_cde_root(lib_fullpath, child_current_pwd);
-      }
-      free(lib_fullpath);
-    }
-
-    free(filename_copy);
-  }
-
-
-  for (i = 0; i < libs_to_check_ind; i++) {
-    free(libs_to_check[i]);
-  }
-
-  fclose(f);
-}
 
 
 // modify a single argument to the given system call
@@ -1557,7 +1303,7 @@ void CDE_begin_execve(struct tcb* tcp) {
       // TODO: is this the right thing to do here?  I think we might
       // need to do something better here (think harder about this case!)
       if (CDE_exec_mode) {
-        // redirect the executable's path to within $CDE_ROOT_DIR:
+        // redirect the executable's path to within cde-root/:
         modify_syscall_single_arg(tcp, 1);
       }
 
@@ -1928,7 +1674,7 @@ void CDE_begin_execve(struct tcb* tcp) {
         ptrace(PTRACE_SETREGS, tcp->pid, NULL, (long)&cur_regs);
       }
       else {
-        // simply redirect the executable's path to within $CDE_ROOT_DIR:
+        // simply redirect the executable's path to within cde-root/:
         modify_syscall_single_arg(tcp, 1);
       }
     }
@@ -2370,7 +2116,6 @@ void CDE_end_fchdir(struct tcb* tcp) {
       char* redirected_path =
         redirect_filename_into_cderoot(tcp->current_dir, tcp->current_dir, tcp);
       if (redirected_path) {
-        //mkdir_recursive(redirected_path, 0);
         make_mirror_dirs_in_cde_package(tcp->current_dir, 0);
         free(redirected_path);
       }
@@ -2890,154 +2635,6 @@ void CDE_create_toplevel_symlink_dirs() {
 }
 
 
-// create a matching symlink for filename within CDE_ROOT_DIR
-// and copy over the symlink's target into CDE_ROOT_DIR as well
-//
-// recursively handle cases where there are symlinks to other symlinks,
-// so that we need to create multiple levels of symlinks!
-//
-// Pre-req: filename must be an absolute path to a symlink
-static void create_symlink_in_cde_root(char* filename, char* child_current_pwd) {
-  char* filename_abspath = canonicalize_path(filename, child_current_pwd);
-
-  // target file must exist, so let's resolve its name
-  char* orig_symlink_target = readlink_strdup(filename_abspath);
-
-  char* filename_abspath_copy = strdup(filename_abspath); // dirname() destroys its arg
-  char* dir = dirname(filename_abspath_copy);
-  char* dir_realpath = realpath_strdup(dir);
-  free(filename_abspath_copy);
-
-  char* symlink_loc_in_package = prepend_cderoot(filename_abspath);
-
-  // make sure parent directories exist
-  //mkdir_recursive(symlink_loc_in_package, 1);
-  make_mirror_dirs_in_cde_package(filename_abspath, 1);
-
-  char* symlink_target_abspath = NULL;
-
-  // ugh, remember that symlinks can point to both absolute AND
-  // relative paths ...
-  if (IS_ABSPATH(orig_symlink_target)) {
-    symlink_target_abspath = strdup(orig_symlink_target);
-
-    // this is sort of tricky.  we need to insert in a bunch of ../
-    // to bring the directory BACK UP to cde-root, and then we need
-    // to insert in the original absolute path, in order to make the
-    // symlink in the CDE package a RELATIVE path starting from
-    // the cde-root/ base directory
-    struct path* p = new_path_from_abspath(dir_realpath);
-    char tmp[MAXPATHLEN];
-    if (p->depth > 0) {
-      strcpy(tmp, "..");
-      int i;
-      for (i = 1; i < p->depth; i++) {
-        strcat(tmp, "/..");
-      }
-    }
-    else {
-      strcpy(tmp, "."); // simply use '.' if there are no nesting layers
-    }
-    delete_path(p);
-
-    strcat(tmp, orig_symlink_target);
-
-    //printf("symlink(%s, %s)\n", tmp, symlink_loc_in_package);
-    symlink(tmp, symlink_loc_in_package);
-  }
-  else {
-    symlink_target_abspath = format("%s/%s", dir_realpath, orig_symlink_target);
-
-    // create a new identical symlink in cde-root/
-    //printf("symlink(%s, %s)\n", orig_symlink_target, symlink_loc_in_package);
-    symlink(orig_symlink_target, symlink_loc_in_package);
-  }
-  assert(symlink_target_abspath);
-  assert(IS_ABSPATH(symlink_target_abspath));
-
-  free(dir_realpath);
-  free(symlink_loc_in_package);
-  free(orig_symlink_target);
-
-
-  struct stat symlink_target_stat;
-  if (lstat(symlink_target_abspath, &symlink_target_stat)) { // lstat does NOT follow symlinks
-    fprintf(stderr, "CDE WARNING: symlink_target_abspath ('%s') cannot be found\n", symlink_target_abspath);
-    return; // leads to memory leak, but oh well
-  }
-
-  if (S_ISLNK(symlink_target_stat.st_mode)) {
-    /* this is super nasty ... we need to handle multiple levels of
-       symlinks ... yes, symlinks to symlinks!
-
-      some programs like java are really picky about the EXACT directory
-      structure being replicated within cde-package.  e.g., java will refuse
-      to start unless the directory structure is perfectly mimicked (since it
-      uses its true path to load start-up libraries).  this means that CDE
-      Needs to be able to potentially traverse through multiple levels of
-      symlinks and faithfully recreate them within cde-package.
-
-      For example, on chongzi (Fedora Core 9):
-
-      /usr/bin/java is a symlink to /etc/alternatives/java
-
-      but /etc/alternatives/java is itself a symlink to /usr/lib/jvm/jre-1.6.0-openjdk/bin/java
-
-      this example involves 2 levels of symlinks, and java requires that the
-      TRUE binary to be found here in the package in order to run properly:
-
-        /usr/lib/jvm/jre-1.6.0-openjdk/bin/java
-
-    */
-    // krazy rekursive kall!!!
-    create_symlink_in_cde_root(symlink_target_abspath, child_current_pwd);
-  }
-  else {
-    // ok, let's get the absolute path without any '..' or '.' funniness
-    // MUST DO IT IN THIS ORDER, OR IT WILL EXHIBIT SUBTLE BUGS!!!
-    char* symlink_dst_original_path = canonicalize_abspath(symlink_target_abspath);
-    char* symlink_dst_abspath = prepend_cderoot(symlink_dst_original_path);
-    //printf("  symlink_target_abspath: %s\n", symlink_target_abspath);
-    //printf("  symlink_dst_abspath: %s\n\n", symlink_dst_abspath);
-
-    if (S_ISREG(symlink_target_stat.st_mode)) {
-      // base case, just hard link or copy symlink_target_abspath into symlink_dst_abspath
-
-      // ugh, this is getting really really gross, mkdir all dirs stated in
-      // symlink_dst_abspath if they don't yet exist
-      //mkdir_recursive(symlink_dst_abspath, 1);
-      make_mirror_dirs_in_cde_package(symlink_dst_original_path, 1);
-
-      //printf("  cp %s %s\n", symlink_target_abspath, symlink_dst_abspath);
-      // copy the target file over to cde-root/
-      if ((link(symlink_target_abspath, symlink_dst_abspath) != 0) && (errno != EEXIST)) {
-        copy_file(symlink_target_abspath, symlink_dst_abspath);
-      }
-
-      // if it's a shared library, then heuristically try to grep
-      // through it to find whether it might dynamically load any other
-      // libraries (e.g., those for other CPU types that we can't pick
-      // up via strace)
-      find_and_copy_possible_dynload_libs(filename, child_current_pwd);
-    }
-    else if (S_ISDIR(symlink_target_stat.st_mode)) { // symlink to directory
-      // make sure the target directory actually exists
-      //mkdir_recursive(symlink_dst_abspath, 0);
-      make_mirror_dirs_in_cde_package(symlink_dst_original_path, 0);
-    }
-    else {
-      fprintf(stderr, "CDE WARNING: create_symlink_in_cde_root('%s') has unknown target file type\n", filename);
-    }
-
-    free(symlink_dst_abspath);
-    free(symlink_dst_original_path);
-  }
-
-  free(symlink_target_abspath);
-  free(filename_abspath);
-}
-
-
 void CDE_init_tcb_dir_fields(struct tcb* tcp) {
   // malloc new entries, and then decide whether to inherit from parent
   // process entry or directly initialize
@@ -3153,6 +2750,7 @@ void CDE_init_pseudo_root_dir() {
 //
 // argv[optind] is the target program's name
 void CDE_create_convenience_scripts(char** argv, int optind) {
+  assert(!CDE_exec_mode);
   char* target_program_fullpath = argv[optind];
 
   // only take the basename to construct cde_script_name,
@@ -3163,7 +2761,6 @@ void CDE_create_convenience_scripts(char** argv, int optind) {
 
   if (progname_redirected) {
     // make sure directory exists :)
-    //mkdir_recursive(progname_redirected, 1);
     make_mirror_dirs_in_cde_package(cde_starting_pwd, 0);
 
     // this is sort of tricky.  we need to insert in a bunch of ../ so
@@ -3265,10 +2862,6 @@ void CDE_add_ignore_envvar(char* p) {
   _add_to_array_internal(ignore_envvars, &ignore_envvars_ind, p, "ignore_envvars");
 }
 
-void CDE_add_create_blankfile_prefix_path(char* p) {
-  _add_to_array_internal(create_blankfile_prefix_paths, &create_blankfile_prefix_paths_ind, p, "create_blankfile_prefix_paths");
-}
-
 
 // initialize arrays based on the cde.options file, which has the grammar:
 //
@@ -3299,7 +2892,6 @@ void CDE_init_options() {
   memset(redirect_substr_paths, 0, sizeof(redirect_substr_paths));
   memset(ignore_envvars,        0, sizeof(ignore_envvars));
   memset(process_ignores,       0, sizeof(process_ignores));
-  memset(create_blankfile_prefix_paths, 0, sizeof(create_blankfile_prefix_paths));
 
 
   ignore_exact_paths_ind = 0;
@@ -3310,14 +2902,13 @@ void CDE_init_options() {
   redirect_substr_paths_ind = 0;
   ignore_envvars_ind = 0;
   process_ignores_ind = 0;
-  create_blankfile_prefix_paths_ind = 0;
 
   char in_braces = false;
 
   FILE* f = NULL;
 
   if (CDE_exec_mode) {
-    // look for a cde.options file in $CDE_PACKAGE_DIR
+    // look for a cde.options file in the package
 
     // you must run this AFTER running CDE_init_pseudo_root_dir()
     assert(*cde_pseudo_root_dir);
@@ -3430,9 +3021,6 @@ void CDE_init_options() {
           }
           set_id = 9;
         }
-        else if (strcmp(p, "create_blankfile_prefix") == 0) {
-          set_id = 10;
-        }
         else {
           fprintf(stderr, "Fatal error in cde.options: unrecognized token '%s'\n", p);
           exit(1);
@@ -3503,9 +3091,6 @@ void CDE_init_options() {
               fprintf(stderr, "Fatal error in cde.options: more than 20 'process_ignore_prefix' entries\n");
               exit(1);
             }
-            break;
-          case 10:
-            CDE_add_create_blankfile_prefix_path(p);
             break;
           default:
             assert(0);

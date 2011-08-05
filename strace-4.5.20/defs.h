@@ -404,10 +404,11 @@ struct tcb {
 };
 
 // pgbovine
-char* CDE_PACKAGE_DIR;
 #define CDE_ROOT_NAME "cde-root"
+// these are both ABSOLUTE paths
+char* CDE_PACKAGE_DIR;
 char* CDE_ROOT_DIR;
-int CDE_ROOT_LEN;
+
 
 /* TCB flags */
 #define TCB_STARTUP	00001	/* We have just begun ptracing this process */
