@@ -645,13 +645,15 @@ void create_mirror_symlink_and_target(char* filename_abspath, char* src_prefix, 
     assert(IS_ABSPATH(orig_symlink_target_suffix));
     strcat(relative_symlink_target, orig_symlink_target_suffix);
 
-    if (symlink(relative_symlink_target, dst_symlink_path) != 0) {
+    // EEXIST means the file already exists, which isn't really a symlink failure ...
+    if (symlink(relative_symlink_target, dst_symlink_path) != 0 && (errno != EEXIST)) {
       fprintf(stderr, "WARNING: symlink('%s', '%s') failed\n", relative_symlink_target, dst_symlink_path);
     }
   }
   else {
     symlink_target_abspath = format("%s/%s", dir_realpath, orig_symlink_target);
-    if (symlink(orig_symlink_target, dst_symlink_path) != 0) {
+    // EEXIST means the file already exists, which isn't really a symlink failure ...
+    if (symlink(orig_symlink_target, dst_symlink_path) != 0 && (errno != EEXIST)) {
       fprintf(stderr, "WARNING: symlink('%s', '%s') failed\n", orig_symlink_target, dst_symlink_path);
     }
   }
