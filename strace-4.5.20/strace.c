@@ -95,6 +95,7 @@ extern char *optarg;
 extern char CDE_exec_mode;
 extern char CDE_provenance_mode; // -p option
 extern char CDE_verbose_mode; // -v option
+extern char CDE_exec_streaming_mode; // -s option
 extern char CDE_use_linker_from_package; // ON by default, -l option to turn OFF
 extern void alloc_tcb_CDE_fields(struct tcb* tcp);
 extern void free_tcb_CDE_fields(struct tcb* tcp);
@@ -211,6 +212,11 @@ int exitval;
             "Copyright 2010-2011 Philip Guo (pg@cs.stanford.edu)\n"
             "http://www.stanford.edu/~pgbovine/cde.html\n\n"
             "usage: cde-exec [command within cde-root/ to run]\n");
+
+    fprintf(ofp, "\nOptions\n");
+    fprintf(ofp, "  -l  : Use native dynamic linker on machine (less portable but more robust)\n");
+    fprintf(ofp, "  -s  : Streaming mode (ooh, mysterious!)\n");
+    fprintf(ofp, "  -v  : Verbose mode (for debugging)\n");
   }
   else {
     fprintf(ofp,
@@ -218,14 +224,13 @@ int exitval;
             "Copyright 2010-2011 Philip Guo (pg@cs.stanford.edu)\n"
             "http://www.stanford.edu/~pgbovine/cde.html\n\n"
             "usage: cde [command to run and package]\n");
-  }
 
-  fprintf(ofp, "\nOptions\n");
-  fprintf(ofp, "  -l  : Use native dynamic linker on machine (less portable but more robust)\n");
-  fprintf(ofp, "  -p  : Provenance mode (output a provenance.log file)\n");
-  fprintf(ofp, "  -v  : Verbose mode (for debugging)\n");
-  fprintf(ofp, "  -c  : Print the order of files copied into the package in cde-copied-files.log\n");
-  fprintf(ofp, "  -o <output dir> : Set a custom output directory instead of \"cde-package/\"\n");
+    fprintf(ofp, "\nOptions\n");
+    fprintf(ofp, "  -p  : Provenance mode (output a provenance.log file)\n");
+    fprintf(ofp, "  -c  : Print the order of files copied into the package in cde-copied-files.log\n");
+    fprintf(ofp, "  -o <output dir> : Set a custom output directory instead of \"cde-package/\"\n");
+    fprintf(ofp, "  -v  : Verbose mode (for debugging)\n");
+  }
 
 	exit(exitval);
 }
@@ -769,6 +774,9 @@ main(int argc, char *argv[])
   }
 	progname = argv[0];
 
+  // pgbovine - if program name is 'cde-exec', then activate CDE_exec_mode
+  CDE_exec_mode = (strcmp(basename(progname), "cde-exec") == 0);
+
 
 	/* Allocate the initial tcbtab.  */
 	tcbtabsize = argc;	/* Surely enough for all -p args.  */
@@ -808,11 +816,11 @@ main(int argc, char *argv[])
 	qualify("verbose=all");
 	qualify("signal=all");
 	while ((c = getopt(argc, argv,
-		"+cCdfFhqrtTvVxzpl"
+		"+cCdfFhqrtTvVxzpls"
 #ifndef USE_PROCFS
 		"D"
 #endif
-		"a:A:e:o:O:s:S:u:E:i:I:")) != EOF) {
+		"a:A:e:o:O:S:u:E:i:I:")) != EOF) {
 		switch (c) {
 		case 'c':
       // pgbovine - hijack for -c option
@@ -929,6 +937,9 @@ main(int argc, char *argv[])
       */
 			break;
 		case 's':
+      CDE_exec_streaming_mode = 1;
+      // pgbovine - hijack for 's' (streaming mode)
+      /*
 			max_strlen = atoi(optarg);
 			if (max_strlen < 0) {
 				fprintf(stderr,
@@ -936,6 +947,7 @@ main(int argc, char *argv[])
 					progname, optarg);
 				exit(1);
 			}
+      */
 			break;
 		case 'S':
 			set_sortby(optarg);
@@ -1036,20 +1048,12 @@ main(int argc, char *argv[])
   // pgbovine - allow most promiscuous permissions for new files/directories
   umask(0000);
 
-  // pgbovine - if program name is 'cde-exec', then activate CDE_exec_mode
-  //
-  // don't do anything else yet since we haven't processed command-line
-  // options and stripped them off of argv.  wait to do all of the real
-  // initialization work later in this function
-  if (strcmp(basename(progname), "cde-exec") == 0) {
-    CDE_exec_mode = 1;
 
+  if (CDE_exec_mode) {
     // must do this before running CDE_init_options()
     CDE_init_pseudo_root_dir();
   }
   else {
-    CDE_exec_mode = 0;
-
     if (!CDE_PACKAGE_DIR) { // if it hasn't been set by the '-o' option, set to a default
       CDE_PACKAGE_DIR = "cde-package";
     }
@@ -1188,19 +1192,9 @@ main(int argc, char *argv[])
     }
   }
 
-  // do this AFTER creating cde.options but BEFORE initializing
-  // command-line options since some options (e.g., -i, -I) might rely on it
+
+  // do this AFTER creating cde.options
   CDE_init_options();
-
-
-  // pgbovine - ccache compiler cache causes weird issues with
-  // non-reproducibility, so simply disable it
-  //
-  // is this still true?  NO!
-  //
-  // let's take out this hack unless it's absolutely necessary,
-  // since I don't want there to be any hidden surprises for the user
-  //setenv("CCACHE_DISABLE", "1", 1);
 
 
   if (CDE_exec_mode) {

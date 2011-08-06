@@ -65,6 +65,10 @@ char CDE_exec_mode;
 char CDE_provenance_mode = 0; // -p option
 char CDE_verbose_mode = 0; // -v option
 
+
+// only relevant if CDE_exec_mode = 1
+char CDE_exec_streaming_mode = 0; // -s option
+
 // 1 if we should use the dynamic linker from within the package
 //   (much more portable, but might be less robust since the dynamic linker
 //   must be invoked explicitly, which leads to some weird-ass bugs)
@@ -2878,11 +2882,6 @@ void CDE_add_ignore_envvar(char* p) {
 // {
 //   process_ignore_prefix=<path prefix to ignore for the given process>
 // }
-//
-// On 2011-07-27, added support for making cde create BLANK versions of certain
-// files in the package (but not to have cde-exec ignore them),
-// with the following syntax:
-// create_blankfile_prefix=<path prefix to create blank files>
 void CDE_init_options() {
   memset(ignore_exact_paths,    0, sizeof(ignore_exact_paths));
   memset(ignore_prefix_paths,   0, sizeof(ignore_prefix_paths));
