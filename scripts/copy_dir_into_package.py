@@ -3,7 +3,9 @@
 #
 # Use okapi to copy over all sub-directories and symlinks, and to make
 # sure that all symlinks are properly munged to point to relative paths
-# within the package.  (Note that rsync does NOT munge symlinks.)
+# within the package.  (Note that rsync does NOT munge symlinks or
+# faithfully re-create the original directory structure in the presence
+# of symlinks to directories.)
 #
 # by Philip Guo
 
@@ -39,6 +41,14 @@ def copy_dir_into_package(basedir, dst_root_dir):
       p = os.path.join(d, sd)
       if os.path.islink(p):
         run_cmd_print_stderr([OKAPI_BIN, p, '', dst_root_dir])
+        # follow the symlink
+        dir_symlink_target = os.path.realpath(p)
+
+        # only recurse if dir_symlink_target is OUTSIDE of basedir
+        # to (hopefully) prevent infinite loops
+        base_realpath = os.path.realpath(basedir)
+        if not dir_symlink_target.startswith(base_realpath):
+          copy_dir_into_package(dir_symlink_target, dst_root_dir)
 
 
 if __name__ == "__main__":
