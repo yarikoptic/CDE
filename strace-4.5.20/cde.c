@@ -190,10 +190,10 @@ int process_ignores_ind = 0;
 char cde_pseudo_root_dir[MAXPATHLEN];
 
 
-// the local directory to store a cached copy of files accessed from
-// the remote machine (only relevant for "cde-exec -s")
-char* cde_root_cache_dir = NULL;
-// file paths that should be accessed in cde-package/cde-root-cache
+// the path to where the root directory is mounted on the remote machine
+// (only relevant for "cde-exec -s")
+char* cde_remote_root_dir = NULL;
+// file paths that should be accessed in cde-package/cde-root/
 // rather than on the remote machine (only relevant for "cde-exec -s")
 static Trie* cached_files_trie = NULL;
 FILE* cached_files_fp = NULL; // save cached_files_trie on-disk as "locally-cached-files.txt"
@@ -314,38 +314,33 @@ char* create_abspath_within_cderoot(char* path) {
     }
     else {
       if (CDE_exec_streaming_mode) {
-        // copy file into our local cache (if necessary)
-        // and redirect path inside of cde_root_cache_dir
-        char* cached_filepath = format("%s%s", cde_root_cache_dir, path);
+        // copy file into local cde-root/ 'cache' (if necessary)
 
+        // we REALLY rely on cached_files_trie for performance to avoid
+        // unnecessary filesystem accesses
         if (TrieContains(cached_files_trie, path)) {
-          //printf("Using cached filepath: '%s'\n", cached_filepath);
+          // cache hit!  fall-through
         }
         else {
-          // otherwise copy the remote file into our local cache
           printf("Accessing remote file: '%s'\n", path);
-
-          create_mirror_file(path, cde_pseudo_root_dir, cde_root_cache_dir);
+          // copy from remote -> local
+          create_mirror_file(path, cde_remote_root_dir, cde_pseudo_root_dir);
 
           // VERY IMPORTANT: add ALL paths to cached_files_trie, even
           // for nonexistent files, so that we can avoid trying to access
           // those nonexistent files on the remote machine in future
           // executions.  Remember, ANY filesystem access we can avoid
           // will lead to speed-ups.
-
           TrieInsert(cached_files_trie, path);
 
           if (cached_files_fp) {
             fprintf(cached_files_fp, "%s\n", path);
           }
         }
+      }
 
-        return cached_filepath;
-      }
-      else {
-        // normal behavior:
-        return format("%s%s", cde_pseudo_root_dir, path);
-      }
+      // normal behavior - redirect into cde-root/
+      return format("%s%s", cde_pseudo_root_dir, path);
     }
   }
   else {
@@ -2846,13 +2841,18 @@ void CDE_exec_mode_early_init() {
   CDE_init_pseudo_root_dir();
 
   if (CDE_exec_streaming_mode) {
-    // create a local cache directory
     char* tmp = strdup(cde_pseudo_root_dir);
     tmp[strlen(tmp) - strlen(CDE_ROOT_NAME)] = '\0';
-    cde_root_cache_dir = format("%scde-root-cache", tmp);
+    cde_remote_root_dir = format("%scde-remote-root", tmp);
     free(tmp);
 
-    mkdir(cde_root_cache_dir, 0777);
+    struct stat remote_root_stat;
+    if ((stat(cde_remote_root_dir, &remote_root_stat) != 0) ||
+        (!S_ISDIR(remote_root_stat.st_mode))) {
+      fprintf(stderr, "Fatal error: Running in -s mode but '%s' directory does not exist\n",
+              cde_remote_root_dir);
+      exit(1);
+    }
 
     // initialize trie
     cached_files_trie = TrieNew();
