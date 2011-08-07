@@ -104,7 +104,7 @@ extern void strcpy_redirected_cderoot(char* dst, char* src);
 extern void CDE_create_path_symlink_dirs(void);
 extern void CDE_create_toplevel_symlink_dirs(void);
 extern void CDE_init_tcb_dir_fields(struct tcb* tcp);
-extern void CDE_init_pseudo_root_dir(void);
+extern void CDE_exec_mode_early_init(void);
 extern void CDE_create_convenience_scripts(char** argv, int optind);
 extern char cde_starting_pwd[MAXPATHLEN];
 extern char cde_pseudo_root_dir[MAXPATHLEN];
@@ -112,6 +112,7 @@ extern void CDE_init_options(void);
 extern void CDE_init_allow_paths(void);
 extern void CDE_load_environment_vars(void);
 extern FILE* CDE_copied_files_logfile;
+extern char* cde_root_cache_dir;
 #include "okapi.h"
 
 
@@ -1051,7 +1052,7 @@ main(int argc, char *argv[])
 
   if (CDE_exec_mode) {
     // must do this before running CDE_init_options()
-    CDE_init_pseudo_root_dir();
+    CDE_exec_mode_early_init();
   }
   else {
     if (!CDE_PACKAGE_DIR) { // if it hasn't been set by the '-o' option, set to a default

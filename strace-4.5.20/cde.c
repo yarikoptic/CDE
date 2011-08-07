@@ -69,6 +69,60 @@ char CDE_verbose_mode = 0; // -v option
 // only relevant if CDE_exec_mode = 1
 char CDE_exec_streaming_mode = 0; // -s option
 
+
+// Super-simple trie implementation for doing fast string matching:
+// adapted from my earlier IncPy project
+
+typedef struct _trie {
+  struct _trie* children[128]; // we support ASCII characters from 0 to 127
+  int elt_is_present; // 1 if there is an element present here
+} Trie;
+
+
+static Trie* TrieNew(void) {
+  // VERY important to blank out the contents with a calloc()
+  return (Trie*)calloc(1, sizeof(Trie));
+}
+
+static void TrieDelete(Trie* t) {
+  // free all your children before freeing yourself
+  unsigned char i;
+  for (i = 0; i < 128; i++) {
+    if (t->children[i]) {
+      TrieDelete(t->children[i]);
+    }
+  }
+  free(t);
+}
+
+static void TrieInsert(Trie* t, char* ascii_string) {
+  while (*ascii_string != '\0') {
+    unsigned char idx = (unsigned char)*ascii_string;
+    assert(idx < 128); // we don't support extended ASCII characters
+    if (!t->children[idx]) {
+      t->children[idx] = TrieNew();
+    }
+    t = t->children[idx];
+    ascii_string++;
+  }
+
+  t->elt_is_present = 1;
+}
+
+static int TrieContains(Trie* t, char* ascii_string) {
+  while (*ascii_string != '\0') {
+    unsigned char idx = (unsigned char)*ascii_string;
+    t = t->children[idx];
+    if (!t) {
+      return 0; // early termination, no match!
+    }
+    ascii_string++;
+  }
+
+  return t->elt_is_present;
+}
+
+
 // 1 if we should use the dynamic linker from within the package
 //   (much more portable, but might be less robust since the dynamic linker
 //   must be invoked explicitly, which leads to some weird-ass bugs)
@@ -136,12 +190,22 @@ int process_ignores_ind = 0;
 char cde_pseudo_root_dir[MAXPATHLEN];
 
 
+// the local directory to store a cached copy of files accessed from
+// the remote machine (only relevant for "cde-exec -s")
+char* cde_root_cache_dir = NULL;
+// contains the names of files from nonexistent-remote-files.txt
+// in the cde-package/ directory (only relevant for "cde-exec -s")
+static Trie* nonexistent_remote_files_trie = NULL;
+FILE* nonexistent_remote_files_fp = NULL; // save nonexistent_remote_files_trie on-disk
+
+
 // to shut up gcc warnings without going thru #include hell
 extern ssize_t getline(char **lineptr, size_t *n, FILE *stream);
 
 extern char* find_ELF_program_interpreter(char * file_name); // from ../readelf-mini/libreadelf-mini.a
 
 extern void path_pop(struct path* p);
+
 
 
 // returns a component within real_pwd that represents the part within
@@ -838,12 +902,70 @@ static char* redirect_filename_into_cderoot(char* filename, char* child_current_
   // WARNING: behavior of create_abspath_within_cderoot
   // differs based on CDE_exec_mode!
   char* ret = create_abspath_within_cderoot(filename_abspath);
-  free(filename_abspath);
 
   if (CDE_verbose_mode) {
     printf("redirect '%s' => '%s'\n", filename, ret);
   }
 
+
+  if (CDE_exec_mode && CDE_exec_streaming_mode) {
+
+    char* cached_filepath = format("%s%s", cde_root_cache_dir, filename_abspath);
+
+    struct stat cached_st;
+    if (lstat(ret, &cached_st) == 0) { // lstat will NOT follow symlinks
+      // if the file exists within the cache, then use it
+
+      printf("Using cached file: '%s'\n", cached_filepath);
+      free(ret); // we don't need this anymore
+      free(filename_abspath);
+      return cached_filepath;
+    }
+    else {
+      if (TrieContains(nonexistent_remote_files_trie, filename_abspath)) {
+        // if the file is KNOWN not to exist remotely, then just return
+        // cached_filepath so that we can access that path in the cache
+        // and have it fail to find the file, which is MUCH faster than
+        // accessing the file remotely.
+        printf("Known missing file: '%s'\n", filename_abspath);
+
+        free(ret);
+        free(filename_abspath);
+        return cached_filepath;
+      }
+      else {
+        // otherwise try to access the remote file and cache it locally
+        printf("Accessing remote file: '%s'\n", ret);
+
+        // if the file actually exists on the remote machine ...
+        struct stat remote_st;
+        if (lstat(ret, &remote_st) == 0) { // lstat will NOT follow symlinks
+          // then use okapi to make a local copy into cde_root_cache_dir
+
+          create_mirror_file(filename_abspath, cde_pseudo_root_dir, cde_root_cache_dir);
+
+          free(ret); // we don't need this anymore
+          free(filename_abspath);
+          return cached_filepath;
+        }
+        else {
+          TrieInsert(nonexistent_remote_files_trie, filename_abspath);
+
+          // TODO: this only works on the FIRST ('naked') run, but not
+          // for subsequent incremental runs ... need to improve this behavior
+          if (nonexistent_remote_files_fp) {
+            fprintf(nonexistent_remote_files_fp, "%s\n", filename_abspath);
+          }
+
+          // and then just fall through ...
+        }
+      }
+    }
+
+    free(cached_filepath);
+  }
+
+  free(filename_abspath);
   return ret;
 }
 
@@ -2678,6 +2800,7 @@ void CDE_init_tcb_dir_fields(struct tcb* tcp) {
   }
 }
 
+
 // find the absolute path to the cde-root/ directory, since that
 // will be where our fake filesystem starts.  e.g., if our real pwd is:
 //   /home/bob/cde-package/cde-root/home/alice/cool-experiment
@@ -2743,6 +2866,55 @@ void CDE_init_pseudo_root_dir() {
 
   delete_path(p);
 }
+
+// do all the initialization for cde-exec after parsing command-line
+// options but fairly early during the start-up process
+void CDE_exec_mode_early_init() {
+  CDE_init_pseudo_root_dir();
+
+  if (CDE_exec_streaming_mode) {
+    // create a local cache directory
+    char* tmp = strdup(cde_pseudo_root_dir);
+    tmp[strlen(tmp) - strlen(CDE_ROOT_NAME)] = '\0';
+    cde_root_cache_dir = format("%s/cde-root-cache", tmp);
+    free(tmp);
+
+    mkdir(cde_root_cache_dir, 0777);
+
+    // initialize trie
+    nonexistent_remote_files_trie = TrieNew();
+
+    char* p = format("%s/../nonexistent-remote-files.txt", cde_pseudo_root_dir);
+    nonexistent_remote_files_fp = fopen(p, "r");
+
+    // TODO: this behavior is limited and confusing ... improve it!!!
+    // e.g., what happens if you want to make several incremental runs
+    // and build up the nonexistent_remote_files_trie piecemeal?
+    if (nonexistent_remote_files_fp) {
+      char* line = NULL;
+      size_t len = 0;
+      ssize_t read;
+      while ((read = getline(&line, &len, nonexistent_remote_files_fp)) != -1) {
+        assert(line[read-1] == '\n');
+        line[read-1] = '\0'; // strip of trailing newline
+        if (line[0] != '\0') {
+          // pre-seed nonexistent_remote_files_trie:
+          TrieInsert(nonexistent_remote_files_trie, line);
+        }
+      }
+
+
+      fclose(nonexistent_remote_files_fp);
+      nonexistent_remote_files_fp = NULL;
+    }
+    else {
+      nonexistent_remote_files_fp = fopen(p, "w");
+    }
+
+    free(p);
+  }
+}
+
 
 // create a '.cde' version of the target program inside the corresponding
 // location of cde_starting_pwd within CDE_ROOT_DIR, which is a
