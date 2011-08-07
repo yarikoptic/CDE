@@ -313,8 +313,39 @@ char* create_abspath_within_cderoot(char* path) {
       return strdup(path);
     }
     else {
-      // normal behavior:
-      return format("%s%s", cde_pseudo_root_dir, path);
+      if (CDE_exec_streaming_mode) {
+        // copy file into our local cache (if necessary)
+        // and redirect path inside of cde_root_cache_dir
+        char* cached_filepath = format("%s%s", cde_root_cache_dir, path);
+
+        if (TrieContains(cached_files_trie, path)) {
+          //printf("Using cached filepath: '%s'\n", cached_filepath);
+        }
+        else {
+          // otherwise copy the remote file into our local cache
+          printf("Accessing remote file: '%s'\n", path);
+
+          create_mirror_file(path, cde_pseudo_root_dir, cde_root_cache_dir);
+
+          // VERY IMPORTANT: add ALL paths to cached_files_trie, even
+          // for nonexistent files, so that we can avoid trying to access
+          // those nonexistent files on the remote machine in future
+          // executions.  Remember, ANY filesystem access we can avoid
+          // will lead to speed-ups.
+
+          TrieInsert(cached_files_trie, path);
+
+          if (cached_files_fp) {
+            fprintf(cached_files_fp, "%s\n", path);
+          }
+        }
+
+        return cached_filepath;
+      }
+      else {
+        // normal behavior:
+        return format("%s%s", cde_pseudo_root_dir, path);
+      }
     }
   }
   else {
@@ -905,39 +936,6 @@ static char* redirect_filename_into_cderoot(char* filename, char* child_current_
 
   if (CDE_verbose_mode) {
     printf("redirect '%s' => '%s'\n", filename, ret);
-  }
-
-
-  if (CDE_exec_mode && CDE_exec_streaming_mode) {
-
-    char* cached_filepath = format("%s%s", cde_root_cache_dir, filename_abspath);
-
-    if (TrieContains(cached_files_trie, filename_abspath)) {
-      printf("Using cached filepath: '%s'\n", cached_filepath);
-    }
-    else {
-      // otherwise try to access the remote file and cache it locally
-      printf("Accessing remote file: '%s'\n", ret);
-
-      create_mirror_file(filename_abspath, cde_pseudo_root_dir, cde_root_cache_dir);
-
-
-      // VERY IMPORTANT: add ALL paths to cached_files_trie, even for
-      // nonexistent files, so that we can avoid trying to access those
-      // nonexistent files on the remote machine in future executions.
-      // Remember, ANY filesystem access we can avoid will give speed-ups.
-
-      TrieInsert(cached_files_trie, filename_abspath);
-
-      if (cached_files_fp) {
-        fprintf(cached_files_fp, "%s\n", filename_abspath);
-      }
-    }
-
-    free(ret); // we don't need this anymore
-    free(filename_abspath);
-    // ALWAYS return the cached path
-    return cached_filepath;
   }
 
   free(filename_abspath);
