@@ -440,8 +440,9 @@ void create_mirror_file(char* filename_abspath, char* src_prefix, char* dst_pref
   // this will NOT follow the symlink ...
   struct stat src_path_stat;
   if (lstat(src_path, &src_path_stat)) {
-    fprintf(stderr, "FATAL ERROR: lstat('%s') failed\n", src_path);
-    exit(1);
+    // be failure-oblivious here
+    fprintf(stderr, "WARNING: cannot mirror '%s' since it does not exist\n", src_path);
+    goto done;
   }
 
   char is_symlink = S_ISLNK(src_path_stat.st_mode);
