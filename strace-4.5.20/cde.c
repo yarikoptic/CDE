@@ -193,10 +193,10 @@ char cde_pseudo_root_dir[MAXPATHLEN];
 // the local directory to store a cached copy of files accessed from
 // the remote machine (only relevant for "cde-exec -s")
 char* cde_root_cache_dir = NULL;
-// contains the names of files from nonexistent-remote-files.txt
-// in the cde-package/ directory (only relevant for "cde-exec -s")
-static Trie* nonexistent_remote_files_trie = NULL;
-FILE* nonexistent_remote_files_fp = NULL; // save nonexistent_remote_files_trie on-disk
+// file paths that should be accessed in cde-package/cde-root-cache
+// rather than on the remote machine (only relevant for "cde-exec -s")
+static Trie* cached_files_trie = NULL;
+FILE* cached_files_fp = NULL; // save cached_files_trie on-disk as "locally-cached-files.txt"
 
 
 // to shut up gcc warnings without going thru #include hell
@@ -912,57 +912,32 @@ static char* redirect_filename_into_cderoot(char* filename, char* child_current_
 
     char* cached_filepath = format("%s%s", cde_root_cache_dir, filename_abspath);
 
-    struct stat cached_st;
-    if (lstat(ret, &cached_st) == 0) { // lstat will NOT follow symlinks
-      // if the file exists within the cache, then use it
-
-      printf("Using cached file: '%s'\n", cached_filepath);
-      free(ret); // we don't need this anymore
-      free(filename_abspath);
-      return cached_filepath;
+    if (TrieContains(cached_files_trie, filename_abspath)) {
+      printf("Using cached filepath: '%s'\n", cached_filepath);
     }
     else {
-      if (TrieContains(nonexistent_remote_files_trie, filename_abspath)) {
-        // if the file is KNOWN not to exist remotely, then just return
-        // cached_filepath so that we can access that path in the cache
-        // and have it fail to find the file, which is MUCH faster than
-        // accessing the file remotely.
-        printf("Known missing file: '%s'\n", filename_abspath);
+      // otherwise try to access the remote file and cache it locally
+      printf("Accessing remote file: '%s'\n", ret);
 
-        free(ret);
-        free(filename_abspath);
-        return cached_filepath;
-      }
-      else {
-        // otherwise try to access the remote file and cache it locally
-        printf("Accessing remote file: '%s'\n", ret);
+      create_mirror_file(filename_abspath, cde_pseudo_root_dir, cde_root_cache_dir);
 
-        // if the file actually exists on the remote machine ...
-        struct stat remote_st;
-        if (lstat(ret, &remote_st) == 0) { // lstat will NOT follow symlinks
-          // then use okapi to make a local copy into cde_root_cache_dir
 
-          create_mirror_file(filename_abspath, cde_pseudo_root_dir, cde_root_cache_dir);
+      // VERY IMPORTANT: add ALL paths to cached_files_trie, even for
+      // nonexistent files, so that we can avoid trying to access those
+      // nonexistent files on the remote machine in future executions.
+      // Remember, ANY filesystem access we can avoid will give speed-ups.
 
-          free(ret); // we don't need this anymore
-          free(filename_abspath);
-          return cached_filepath;
-        }
-        else {
-          TrieInsert(nonexistent_remote_files_trie, filename_abspath);
+      TrieInsert(cached_files_trie, filename_abspath);
 
-          // TODO: this only works on the FIRST ('naked') run, but not
-          // for subsequent incremental runs ... need to improve this behavior
-          if (nonexistent_remote_files_fp) {
-            fprintf(nonexistent_remote_files_fp, "%s\n", filename_abspath);
-          }
-
-          // and then just fall through ...
-        }
+      if (cached_files_fp) {
+        fprintf(cached_files_fp, "%s\n", filename_abspath);
       }
     }
 
-    free(cached_filepath);
+    free(ret); // we don't need this anymore
+    free(filename_abspath);
+    // ALWAYS return the cached path
+    return cached_filepath;
   }
 
   free(filename_abspath);
@@ -2876,40 +2851,35 @@ void CDE_exec_mode_early_init() {
     // create a local cache directory
     char* tmp = strdup(cde_pseudo_root_dir);
     tmp[strlen(tmp) - strlen(CDE_ROOT_NAME)] = '\0';
-    cde_root_cache_dir = format("%s/cde-root-cache", tmp);
+    cde_root_cache_dir = format("%scde-root-cache", tmp);
     free(tmp);
 
     mkdir(cde_root_cache_dir, 0777);
 
     // initialize trie
-    nonexistent_remote_files_trie = TrieNew();
+    cached_files_trie = TrieNew();
 
-    char* p = format("%s/../nonexistent-remote-files.txt", cde_pseudo_root_dir);
-    nonexistent_remote_files_fp = fopen(p, "r");
+    char* p = format("%s/../locally-cached-files.txt", cde_pseudo_root_dir);
+    cached_files_fp = fopen(p, "r");
 
-    // TODO: this behavior is limited and confusing ... improve it!!!
-    // e.g., what happens if you want to make several incremental runs
-    // and build up the nonexistent_remote_files_trie piecemeal?
-    if (nonexistent_remote_files_fp) {
+    if (cached_files_fp) {
       char* line = NULL;
       size_t len = 0;
       ssize_t read;
-      while ((read = getline(&line, &len, nonexistent_remote_files_fp)) != -1) {
+      while ((read = getline(&line, &len, cached_files_fp)) != -1) {
         assert(line[read-1] == '\n');
         line[read-1] = '\0'; // strip of trailing newline
         if (line[0] != '\0') {
-          // pre-seed nonexistent_remote_files_trie:
-          TrieInsert(nonexistent_remote_files_trie, line);
+          // pre-seed cached_files_trie:
+          TrieInsert(cached_files_trie, line);
         }
       }
-
-
-      fclose(nonexistent_remote_files_fp);
-      nonexistent_remote_files_fp = NULL;
+      fclose(cached_files_fp);
     }
-    else {
-      nonexistent_remote_files_fp = fopen(p, "w");
-    }
+
+    // always open in append mode so that we can be ready to add more
+    // entries on subsequent runs ...
+    cached_files_fp = fopen(p, "a");
 
     free(p);
   }
