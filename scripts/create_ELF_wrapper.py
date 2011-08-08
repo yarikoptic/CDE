@@ -8,7 +8,7 @@
 # then substitutes the wrapper for the original program.
 #
 # Inputs: argv[1] - executable file to wrap   (origfile)
-#         argv[2] - base directory of package (package_basedir)
+#         argv[2] - base directory of package root directory (package_basedir)
 #         argv[3] - absolute path to the dynamic linker to use
 #                   (e.g., '/lib/ld-linux-x86-64.so.2')
 #         argv[4] - colon-separated list of directories where shared libraries
@@ -37,71 +37,75 @@
 #     command-line options, so they have some hope of working within the package.
 
 
-import os, sys, re, stat, subprocess
+import os, sys
+from cde_script_utils import *
 
-###### Input parsing:
 
-origfile = sys.argv[1]
-assert os.path.isfile(origfile), origfile
-bn = os.path.basename(origfile)
-dn = os.path.dirname(origfile)
+def create_ELF_wrapper(origfile, package_basedir, ld_linux_path, ld_library_path_dirs_lst):
+  dn = os.path.dirname(origfile)
 
-package_basedir = sys.argv[2]
-# strip off trailing '/' for simpler string comparisons
-if package_basedir[-1] == '/':
+  # strip off trailing '/' for more reliable string comparisons
+  if package_basedir[-1] == '/':
     package_basedir = package_basedir[:-1]
-assert os.path.isdir(package_basedir)
+  assert package_basedir[-1] != '/'
 
-LD_LINUX_PATH = sys.argv[3]
-assert os.path.isfile(LD_LINUX_PATH)
-assert LD_LINUX_PATH[0] == '/' # absolute path
-assert os.path.isfile(package_basedir + LD_LINUX_PATH) # make sure it exists within the package
+  # ok, we need to check that dn is within a sub-directory of
+  # package_basedir, and figure out how many levels of '../'
+  # are required to get from dn to package_basedir
+  assert dn.startswith(package_basedir) # very crude sub-directory test
 
-LD_LIBRARY_PATH_DIRS = sys.argv[4].split(':')
-
-# make sure these are all absolute paths that exist within the package
-for p in LD_LIBRARY_PATH_DIRS:
-  assert p.startswith('/')
-  assert os.path.isdir(package_basedir + p)
-
-######
-
-
-# ok, we need to check that dn is within a sub-directory of
-# package_basedir, and figure out how many levels of '../'
-# are required to get from dn to package_basedir
-assert dn.startswith(package_basedir) # very crude sub-directory test
-
-levels = 0
-
-tmp = dn
-while tmp:
-  tmp = os.path.dirname(tmp)
-  levels += 1
-  if tmp == package_basedir:
-    break
+  levels = 0
+  tmp = dn
+  while tmp:
+    tmp = os.path.dirname(tmp)
+    levels += 1
+    if tmp == package_basedir:
+      break
 
 
-ld_library_path_str = ':'.join(["$HERE" + ('/..' * levels) + p for p in LD_LIBRARY_PATH_DIRS])
+  ld_library_path_str = ':'.join(["$HERE" + ('/..' * levels) + p for p in ld_library_path_dirs_lst])
 
-file_out = subprocess.Popen(['file', origfile], stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()[0]
-if not ("ELF" in file_out and "executable" in file_out and "dynamically linked" in file_out):
-  print >> sys.stderr, "Skipping", origfile, "because it doesn't appear to be a dynamically-linked ELF executable"
-  sys.exit(-1)
+  if not is_dynamic_ELF_exe(origfile):
+    print >> sys.stderr, "Skipping", origfile, "because it doesn't appear to be a dynamically-linked ELF executable"
+    sys.exit(-1)
 
 
-# mv origfile renamed_file
-renamed_file = origfile + '.original'
-os.rename(origfile, renamed_file)
-renamed_file_basename = os.path.basename(renamed_file)
+  # mv origfile renamed_file
+  renamed_file = origfile + '.original'
+  os.rename(origfile, renamed_file)
+  renamed_file_basename = os.path.basename(renamed_file)
 
-# create wrapper script
-wrapper = open(origfile, 'w')
-print >> wrapper, "#!/bin/sh"
-print >> wrapper, 'HERE="$(dirname "$(readlink -f "${0}")")"'
-print >> wrapper, '"$HERE' + ('/..' * levels) + LD_LINUX_PATH + '" --library-path "' +  ld_library_path_str + '"' + ' "$HERE/' + renamed_file_basename + '" "$@"'
-wrapper.close()
+  # create wrapper script
+  wrapper = open(origfile, 'w')
+  print >> wrapper, "#!/bin/sh"
+  print >> wrapper, 'HERE="$(dirname "$(readlink -f "${0}")")"'
+  print >> wrapper, '"$HERE' + ('/..' * levels) + ld_linux_path + '" --library-path "' +  ld_library_path_str + '"' + ' "$HERE/' + renamed_file_basename + '" "$@"'
+  wrapper.close()
 
-# chmod both original and wrapper to "-rwxr-xr-x"
-os.chmod(origfile, 0755)
-os.chmod(renamed_file, 0755)
+  # chmod both original and wrapper to "-rwxr-xr-x"
+  os.chmod(origfile, 0755)
+  os.chmod(renamed_file, 0755)
+
+
+
+if __name__ == "__main__":
+  origfile = sys.argv[1]
+  assert os.path.isfile(origfile), origfile
+
+  package_basedir = sys.argv[2]
+  assert os.path.isdir(package_basedir)
+
+  LD_LINUX_PATH = sys.argv[3]
+  assert os.path.isfile(LD_LINUX_PATH)
+  assert LD_LINUX_PATH[0] == '/' # absolute path
+  assert os.path.isfile(package_basedir + LD_LINUX_PATH) # make sure it exists within the package
+
+  LD_LIBRARY_PATH_DIRS = sys.argv[4].split(':')
+
+  # make sure these are all absolute paths that exist within the package
+  for p in LD_LIBRARY_PATH_DIRS:
+    assert p.startswith('/')
+    assert os.path.isdir(package_basedir + p)
+
+
+  create_ELF_wrapper(origfile, package_basedir, LD_LINUX_PATH, LD_LIBRARY_PATH_DIRS)

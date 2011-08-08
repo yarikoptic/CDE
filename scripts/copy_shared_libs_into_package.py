@@ -20,12 +20,8 @@
 #
 # by Philip Guo
 
-import os, sys, subprocess
-
-
-def run_cmd(args):
-  (cmd_stdout, cmd_stderr) = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
-  return (cmd_stdout, cmd_stderr)
+import os, sys
+from cde_script_utils import *
 
 
 script_dir = os.path.dirname(os.path.realpath(sys.argv[0]))
@@ -49,11 +45,12 @@ while True:
 
   for (d, subdirs, files) in os.walk(PACKAGE_ROOT_DIR):
     for f in files:
-        p = os.path.join(d, f)
-        # file $p | grep "ELF "
-        (file_cmd_stdout, _) = run_cmd(['file', p])
-        if "ELF " in file_cmd_stdout:
-          ELF_files_in_pkg.add(p)
+      p = os.path.join(d, f)
+      # file $p | grep "ELF "
+      # (note that this picks up both executables AND shared libraries!)
+      (file_cmd_stdout, _) = run_cmd(['file', p])
+      if "ELF " in file_cmd_stdout:
+        ELF_files_in_pkg.add(p)
 
 
   possible_libs_set = set()
