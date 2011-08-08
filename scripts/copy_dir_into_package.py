@@ -1,4 +1,4 @@
-# Copy an entire directory argv[1] into (argv[2] + 'cde-root/')
+# Deep copy an entire directory argv[1] into another directory argv[2]
 # ---
 #
 # Use okapi to copy over all sub-directories and symlinks, and to make
@@ -52,6 +52,6 @@ def copy_dir_into_package(basedir, dst_root_dir):
 
 
 if __name__ == "__main__":
-  package_root_dir = os.path.join(sys.argv[2], 'cde-root/')
+  package_root_dir = sys.argv[2]
   assert os.path.isdir(package_root_dir)
   copy_dir_into_package(sys.argv[1], package_root_dir)

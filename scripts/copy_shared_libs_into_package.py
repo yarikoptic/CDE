@@ -1,12 +1,22 @@
-# Copy all shared libraries referenced by constant strings within ELF binaries
-# within the package root directory, argv[1] + 'cde-root/'
+# Given a package root directory, argv[1], find all shared libraries (*.so*)
+# referenced by constant strings within all ELF binaries within the package, and
+# copy all of those shared libraries (and their transitive dependencies) into the
+# package.
+#
+# Pre-reqs: okapi (compile with "cd .. && make okapi"), file, strings, locate
 # ---
+#
+# Implementation:
 #
 # Use 'file' to find all ELF binaries within the package, then use 'strings' to
 # grep through all ELF binaries looking for "[.]so" patterns that are indicative
 # of shared libraries, then use 'locate' to find those shared libraries on the
 # system, then use 'okapi' to copy those libraries into the package root
 # directory.  Repeat until the set of ELF binaries within the package converges.
+#
+# Note that this script is OVERLY CONSERVATIVE and might grab far more libraries
+# than you actually need, since 'locate' finds ALL versions of libraries
+# matchine the given base filename.
 #
 # by Philip Guo
 
@@ -20,9 +30,11 @@ def run_cmd(args):
 
 script_dir = os.path.dirname(os.path.realpath(sys.argv[0]))
 OKAPI_BIN = os.path.normpath(os.path.join(script_dir, "../okapi"))
-assert os.path.isfile(OKAPI_BIN)
+if not os.path.isfile(OKAPI_BIN):
+  print "Error: %s does not exist.\nPlease run 'make okapi' from the top-level CDE/ directory." % OKAPI_BIN
+  sys.exit(1)
 
-PACKAGE_ROOT_DIR = os.path.join(sys.argv[1], 'cde-root/')
+PACKAGE_ROOT_DIR = sys.argv[1]
 assert os.path.isdir(PACKAGE_ROOT_DIR)
 
 
@@ -86,7 +98,7 @@ while True:
   libfiles_to_copy -= files_to_remove
 
   for f in libfiles_to_copy:
-    print "okapi-ing", f
+    print "  okapi-ing", f, "into", PACKAGE_ROOT_DIR
     (okapi_stdout, okapi_stderr) = run_cmd([OKAPI_BIN, f, '', PACKAGE_ROOT_DIR])
     err = okapi_stderr.strip()
     if err:
@@ -97,3 +109,6 @@ while True:
     break
 
   i += 1
+
+
+print "Done okapi-ing all shared libraries into %s" % PACKAGE_ROOT_DIR
