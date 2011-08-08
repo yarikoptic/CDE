@@ -23,7 +23,7 @@ OKAPI_BIN = os.path.normpath(os.path.join(script_dir, "../okapi"))
 assert os.path.isfile(OKAPI_BIN)
 
 
-def copy_dir_into_package(basedir, dst_root_dir):
+def okapi_dir(basedir, dst_root_dir):
   assert os.path.isdir(basedir)
 
   for (d, subdirs, files) in os.walk(basedir):
@@ -48,10 +48,11 @@ def copy_dir_into_package(basedir, dst_root_dir):
         # to (hopefully) prevent infinite loops
         base_realpath = os.path.realpath(basedir)
         if not dir_symlink_target.startswith(base_realpath):
-          copy_dir_into_package(dir_symlink_target, dst_root_dir)
+          okapi_dir(dir_symlink_target, dst_root_dir)
 
 
 if __name__ == "__main__":
-  package_root_dir = sys.argv[2]
-  assert os.path.isdir(package_root_dir)
-  copy_dir_into_package(sys.argv[1], package_root_dir)
+  dst = sys.argv[2]
+  assert os.path.isdir(dst)
+  okapi_dir(sys.argv[1], dst)
+
