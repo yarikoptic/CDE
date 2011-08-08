@@ -3,7 +3,7 @@
 source okapi_test_common.sh
 okapi_test_init # call init function
 
-COPY_DIR_BIN="python /home/pgbovine/CDE/scripts/okapi_directory.py"
+COPY_DIR_BIN="python /home/pgbovine/CDE/scripts/okapi_dir.py"
 
 rm -rf cde-package/
 mkdir -p cde-package/cde-root/
