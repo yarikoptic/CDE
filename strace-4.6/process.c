@@ -250,6 +250,14 @@ static const struct xlat prctl_options[] = {
 };
 
 
+// pgbovine 
+extern void CDE_begin_execve(struct tcb* tcp);
+extern void CDE_end_execve(struct tcb* tcp);
+
+extern void CDE_init_tcb_dir_fields(struct tcb* tcp);
+extern char CDE_provenance_mode;
+
+ 
 static const char *
 unalignctl_string (unsigned int ctl)
 {
@@ -434,11 +442,18 @@ struct tcb *tcp;
 		fprintf(stderr, "_exit returned!\n");
 		return -1;
 	}
+  // pgbovine - implement special behavior for provenance mode
 	/* special case: we stop tracing this process, finish line now */
-	tprintf("%ld) ", tcp->u_arg[0]);
-	tabto(acolumn);
-	tprintf("= ?");
-	printtrailer();
+	//tprintf("%ld) ", tcp->u_arg[0]);
+	//tabto(acolumn);
+	//tprintf("= ?");
+	//printtrailer();
+
+  if (CDE_provenance_mode) {
+    extern FILE* CDE_provenance_logfile;
+    fprintf(CDE_provenance_logfile, "%d %u EXIT\n", (int)time(0), tcp->pid);
+  }
+	tcp_last = NULL; // swipe relevant code taken from printtrailer() to prevent errors
 	return 0;
 }
 
@@ -520,6 +535,7 @@ struct tcb *tcp;
 		if (syserror(tcp))
 			return 0;
 		tcpchild = alloctcb(tcp->u_rval);
+    CDE_init_tcb_dir_fields(tcpchild); // pgbovine
 		if (proc_open(tcpchild, 2) < 0)
 			droptcb(tcpchild);
 	}
@@ -847,6 +863,9 @@ handle_new_child(struct tcb *tcp, int pid, int bpt)
 			sizeof tcpchild->inst);
 	}
 	tcpchild->parent = tcp;
+
+  CDE_init_tcb_dir_fields(tcpchild); // pgbovine - do it AFTER you init parent
+
 	tcp->nchildren++;
 	if (tcpchild->flags & TCB_SUSPENDED) {
 		/* The child was born suspended, due to our having
@@ -1738,6 +1757,16 @@ sys_execv(struct tcb *tcp)
 int
 sys_execve(struct tcb *tcp)
 {
+  // modified by pgbovine to track dependencies rather than printing
+  if (entering(tcp)) {
+    CDE_begin_execve(tcp);
+  }
+  else {
+    CDE_end_execve(tcp);
+  }
+  return 0;
+
+#ifdef PGBOVINE_COMMENT // pgbovine
 	if (entering(tcp)) {
 		printpath(tcp, tcp->u_arg[0]);
 		if (!verbose(tcp))
@@ -1758,6 +1787,7 @@ sys_execve(struct tcb *tcp)
 		}
 	}
 	return 0;
+#endif // PGBOVINE_COMMENT // pgbovine
 }
 
 #if UNIXWARE > 2
