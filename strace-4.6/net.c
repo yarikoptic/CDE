@@ -119,6 +119,11 @@
 #define IPPROTO_MAX IPPROTO_MAX
 #endif
 
+
+// pgbovine
+extern void CDE_begin_socket_bind_or_connect(struct tcb* tcp);
+
+
 static const struct xlat domains[] = {
 #ifdef PF_AAL5
 	{ PF_AAL5,	"PF_AAL5"	},
@@ -1544,18 +1549,23 @@ int
 sys_bind(tcp)
 struct tcb *tcp;
 {
+  CDE_begin_socket_bind_or_connect(tcp); // pgbovine
+
+  /*
 	if (entering(tcp)) {
 		tprintf("%ld, ", tcp->u_arg[0]);
 		printsock(tcp, tcp->u_arg[1], tcp->u_arg[2]);
 		tprintf(", %lu", tcp->u_arg[2]);
 	}
 	return 0;
+  */
 }
 
 int
 sys_connect(tcp)
 struct tcb *tcp;
 {
+  // pgbovine - handle connect in the same way as bind (see above)
 	return sys_bind(tcp);
 }
 

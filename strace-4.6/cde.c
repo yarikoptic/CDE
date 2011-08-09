@@ -6,7 +6,7 @@ Philip Guo
 
 CDE is currently licensed under GPL v3:
 
-  Copyright (c) 2010 Philip Guo <pg@cs.stanford.edu>
+  Copyright (c) 2010-2011 Philip Guo <pg@cs.stanford.edu>
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
