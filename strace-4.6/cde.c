@@ -50,6 +50,7 @@ CDE is currently licensed under GPL v3:
 
 #include <time.h>
 
+#include <sys/utsname.h> // for uname
 
 // TODO: eliminate this hack if it results in a compile-time error
 #include "config.h" // to get I386 / X86_64 definitions
@@ -64,6 +65,10 @@ char CDE_exec_mode;
 
 char CDE_provenance_mode = 0; // -p option
 char CDE_verbose_mode = 0; // -v option
+
+// only valid if !CDE_exec_mode
+char* CDE_PACKAGE_DIR = NULL;
+char* CDE_ROOT_DIR = NULL;
 
 
 // only relevant if CDE_exec_mode = 1
@@ -84,6 +89,7 @@ static Trie* TrieNew(void) {
   return (Trie*)calloc(1, sizeof(Trie));
 }
 
+/* currently unused ... but could be useful in the future
 static void TrieDelete(Trie* t) {
   // free all your children before freeing yourself
   unsigned char i;
@@ -94,6 +100,7 @@ static void TrieDelete(Trie* t) {
   }
   free(t);
 }
+*/
 
 static void TrieInsert(Trie* t, char* ascii_string) {
   while (*ascii_string != '\0') {
@@ -207,6 +214,13 @@ extern char* find_ELF_program_interpreter(char * file_name); // from ../readelf-
 extern void path_pop(struct path* p);
 
 
+static void CDE_init_options(void);
+static void CDE_create_convenience_scripts(char** argv, int optind);
+static void CDE_create_toplevel_symlink_dirs(void);
+static void CDE_create_path_symlink_dirs(void);
+static void CDE_load_environment_vars(void);
+
+
 
 // returns a component within real_pwd that represents the part within
 // cde_pseudo_root_dir
@@ -261,7 +275,7 @@ static char* extract_sandboxed_pwd(char* real_pwd, struct tcb* tcp) {
 
   // special case for '/' directory:
   if (strlen(sandboxed_pwd) == 0) {
-    return "/";
+    return (char*)"/";
   }
   else {
     return sandboxed_pwd;
@@ -368,7 +382,7 @@ char* create_abspath_within_cderoot(char* path) {
 // when necessary (sort of emulate "mkdir -p" functionality)
 // if pop_one is non-zero, then pop last element before doing "mkdir -p"
 static void make_mirror_dirs_in_cde_package(char* original_abspath, int pop_one) {
-  create_mirror_dirs(original_abspath, "", CDE_ROOT_DIR, pop_one);
+  create_mirror_dirs(original_abspath, (char*)"", CDE_ROOT_DIR, pop_one);
 }
 
 
@@ -493,7 +507,7 @@ static void copy_file_into_cde_root(char* filename, char* child_current_pwd) {
     fprintf(CDE_copied_files_logfile, "%s\n", filename_abspath);
   }
 
-  create_mirror_file(filename_abspath, "", CDE_ROOT_DIR);
+  create_mirror_file(filename_abspath, (char*)"", CDE_ROOT_DIR);
 
   free(filename_abspath);
 }
@@ -2632,7 +2646,7 @@ void CDE_end_getcwd(struct tcb* tcp) {
 // 'bin' in cde-root/ and point it to ./KNOPPIX/bin
 //
 // DO THIS AT THE VERY BEGINNING OF EXECUTION!
-void CDE_create_path_symlink_dirs() {
+static void CDE_create_path_symlink_dirs() {
   char *p;
   int m, n;
   struct stat st;
@@ -2705,7 +2719,7 @@ void CDE_create_path_symlink_dirs() {
     ...
     usr --> /UNIONFS/usr
 */
-void CDE_create_toplevel_symlink_dirs() {
+static void CDE_create_toplevel_symlink_dirs() {
   DIR* dp = opendir("/");
   assert(dp);
   struct dirent *ep;
@@ -2835,52 +2849,257 @@ void CDE_init_pseudo_root_dir() {
   delete_path(p);
 }
 
-// do all the initialization for cde-exec after parsing command-line
-// options but fairly early during the start-up process
-void CDE_exec_mode_early_init() {
-  CDE_init_pseudo_root_dir();
 
-  if (CDE_exec_streaming_mode) {
-    char* tmp = strdup(cde_pseudo_root_dir);
-    tmp[strlen(tmp) - strlen(CDE_ROOT_NAME)] = '\0';
-    cde_remote_root_dir = format("%scde-remote-root", tmp);
-    free(tmp);
+// pgbovine - do all CDE initialization here after command-line options
+// have been processed (argv[optind] is the name of the target program)
+void CDE_init(char** argv, int optind) {
+  // pgbovine - initialize this before doing anything else!
+  getcwd(cde_starting_pwd, sizeof cde_starting_pwd);
 
-    struct stat remote_root_stat;
-    if ((stat(cde_remote_root_dir, &remote_root_stat) != 0) ||
-        (!S_ISDIR(remote_root_stat.st_mode))) {
-      fprintf(stderr, "Fatal error: Running in -s mode but '%s' directory does not exist\n",
-              cde_remote_root_dir);
+
+  // pgbovine - allow most promiscuous permissions for new files/directories
+  umask(0000);
+
+
+  if (CDE_exec_mode) {
+    // must do this before running CDE_init_options()
+    CDE_init_pseudo_root_dir();
+
+    if (CDE_exec_streaming_mode) {
+      char* tmp = strdup(cde_pseudo_root_dir);
+      tmp[strlen(tmp) - strlen(CDE_ROOT_NAME)] = '\0';
+      cde_remote_root_dir = format("%scde-remote-root", tmp);
+      free(tmp);
+
+      struct stat remote_root_stat;
+      if ((stat(cde_remote_root_dir, &remote_root_stat) != 0) ||
+          (!S_ISDIR(remote_root_stat.st_mode))) {
+        fprintf(stderr, "Fatal error: Running in -s mode but '%s' directory does not exist\n",
+                cde_remote_root_dir);
+        exit(1);
+      }
+
+      // initialize trie
+      cached_files_trie = TrieNew();
+
+      char* p = format("%s/../locally-cached-files.txt", cde_pseudo_root_dir);
+      cached_files_fp = fopen(p, "r");
+
+      if (cached_files_fp) {
+        char* line = NULL;
+        size_t len = 0;
+        ssize_t read;
+        while ((read = getline(&line, &len, cached_files_fp)) != -1) {
+          assert(line[read-1] == '\n');
+          line[read-1] = '\0'; // strip of trailing newline
+          if (line[0] != '\0') {
+            // pre-seed cached_files_trie:
+            TrieInsert(cached_files_trie, line);
+          }
+        }
+        fclose(cached_files_fp);
+      }
+
+      // always open in append mode so that we can be ready to add more
+      // entries on subsequent runs ...
+      cached_files_fp = fopen(p, "a");
+
+      free(p);
+    }
+
+  }
+  else {
+    if (!CDE_PACKAGE_DIR) { // if it hasn't been set by the '-o' option, set to a default
+      CDE_PACKAGE_DIR = (char*)"cde-package";
+    }
+
+    // make this an absolute path!
+    CDE_PACKAGE_DIR = canonicalize_path(CDE_PACKAGE_DIR, cde_starting_pwd);
+    CDE_ROOT_DIR = format("%s/%s", CDE_PACKAGE_DIR, CDE_ROOT_NAME);
+    assert(IS_ABSPATH(CDE_ROOT_DIR));
+
+    mkdir(CDE_PACKAGE_DIR, 0777);
+    mkdir(CDE_ROOT_DIR, 0777);
+
+
+    // if we can't even create CDE_ROOT_DIR, then abort with a failure
+    struct stat cde_rootdir_stat;
+    if (stat(CDE_ROOT_DIR, &cde_rootdir_stat)) {
+      fprintf(stderr, "Error: Cannot create CDE root directory at \"%s\"\n", CDE_ROOT_DIR);
       exit(1);
     }
 
-    // initialize trie
-    cached_files_trie = TrieNew();
 
-    char* p = format("%s/../locally-cached-files.txt", cde_pseudo_root_dir);
-    cached_files_fp = fopen(p, "r");
-
-    if (cached_files_fp) {
-      char* line = NULL;
-      size_t len = 0;
-      ssize_t read;
-      while ((read = getline(&line, &len, cached_files_fp)) != -1) {
-        assert(line[read-1] == '\n');
-        line[read-1] = '\0'; // strip of trailing newline
-        if (line[0] != '\0') {
-          // pre-seed cached_files_trie:
-          TrieInsert(cached_files_trie, line);
-        }
+    // collect uname information in CDE_PACKAGE_DIR/cde.uname
+    struct utsname uname_info;
+    if (uname(&uname_info) >= 0) {
+      char* fn = format("%s/cde.uname", CDE_PACKAGE_DIR);
+      FILE* uname_f = fopen(fn, "w");
+      free(fn);
+      if (uname_f) {
+        fprintf(uname_f, "uname: '%s' '%s' '%s' '%s'\n",
+                          uname_info.sysname,
+                          uname_info.release,
+                          uname_info.version,
+                          uname_info.machine);
+        fclose(uname_f);
       }
-      fclose(cached_files_fp);
     }
 
-    // always open in append mode so that we can be ready to add more
-    // entries on subsequent runs ...
-    cached_files_fp = fopen(p, "a");
+    // if cde.options doesn't yet exist, create it in pwd and seed it
+    // with default values that are useful to ignore in practice
+    //
+    // do this BEFORE CDE_init_options() so that we pick up those
+    // ignored values
+    struct stat cde_options_stat;
+    if (stat("cde.options", &cde_options_stat)) {
+      FILE* f = fopen("cde.options", "w");
 
-    free(p);
+      fputs(CDE_OPTIONS_VERSION_NUM, f);
+      fputs(" (do not alter this first line!)\n", f);
+
+      // /dev, /proc, and /sys are special system directories with fake files
+      //
+      // some sub-directories within /var contains 'volatile' temp files
+      // that change when system is running normally
+      //
+      // (Note that it's a bit too much to simply ignore all of /var,
+      // since files in dirs like /var/lib might be required - e.g., see
+      // gnome-sudoku example)
+      //
+      // $HOME/.Xauthority is used for X11 authentication via ssh, so we need to
+      // use the REAL version and not the one in cde-root/
+      //
+      // ignore "/tmp" and "/tmp/*" since programs often put lots of
+      // session-specific stuff into /tmp so DO NOT track files within
+      // there, or else you will risk severely 'overfitting' and ruining
+      // portability across machines.  it's safe to assume that all Linux
+      // distros have a /tmp directory that anybody can write into
+      fputs("\n# These directories often contain pseudo-files that shouldn't be tracked\n", f);
+      fputs("ignore_prefix=/dev/\n", f);
+      fputs("ignore_exact=/dev\n", f);
+      fputs("ignore_prefix=/proc/\n", f);
+      fputs("ignore_exact=/proc\n", f);
+      fputs("ignore_prefix=/sys/\n", f);
+      fputs("ignore_exact=/sys\n", f);
+      fputs("ignore_prefix=/var/cache/\n", f);
+      fputs("ignore_prefix=/var/lock/\n", f);
+      fputs("ignore_prefix=/var/log/\n", f);
+      fputs("ignore_prefix=/var/run/\n", f);
+      fputs("ignore_prefix=/var/tmp/\n", f);
+      fputs("ignore_prefix=/tmp/\n", f);
+      fputs("ignore_exact=/tmp\n", f);
+
+      fputs("\n# un-comment the entries below if you think they might help your app:\n", f);
+      fputs("#ignore_exact=/etc/ld.so.cache\n", f);
+      fputs("#ignore_exact=/etc/ld.so.preload\n", f);
+      fputs("#ignore_exact=/etc/ld.so.nohwcap\n", f);
+
+      fputs("\n# Ignore .Xauthority to allow X Windows programs to work\n", f);
+      fputs("ignore_substr=.Xauthority\n", f);
+
+      // we gotta ignore /etc/resolv.conf or else Google Earth can't
+      // access the network when on another machine, so it won't work
+      // (and I think other network-facing apps might not work either!)
+      fputs("\n# Ignore so that networking can work properly\n", f);
+      fputs("ignore_exact=/etc/resolv.conf\n", f);
+
+      fputs("# These files might be useful to ignore along with /etc/resolv.conf\n", f);
+      fputs("# (un-comment if you want to try them)\n", f);
+      fputs("#ignore_exact=/etc/host.conf\n", f);
+      fputs("#ignore_exact=/etc/hosts\n", f);
+      fputs("#ignore_exact=/etc/nsswitch.conf\n", f);
+      fputs("#ignore_exact=/etc/gai.conf\n", f);
+
+      // ewencp also suggests looking into ignoring these other
+      // networking-related files:
+      /* Hmm, good point. There's probably lots -- if you're trying to
+         run a server, /etc/hostname, /etc/hosts.allow and
+         /etc/hosts.deny could all be problematic.  /etc/hosts could be
+         a problem for client or server, although its unusual to have
+         much in there. One way it could definitely be a problem is if
+         the hostname is in /etc/hosts and you want to use it as a
+         server, e.g. I run on my machine (ahoy) the server and client,
+         which appears in /etc/hosts, and then when cde-exec runs it
+         ends up returning 127.0.0.1.  But for all of these, I actually
+         don't know when the file gets read, so I'm not certain any of
+         them are really a problem. */
+
+      fputs("\n# Access the target machine's password files:\n", f);
+      fputs("# (some programs like texmacs need these lines to be commented-out,\n", f);
+      fputs("#  since they try to use home directory paths within the passwd file,\n", f);
+      fputs("#  and those paths might not exist within the package.)\n", f);
+      fputs("ignore_prefix=/etc/passwd\n", f);
+      fputs("ignore_prefix=/etc/shadow\n", f);
+
+
+      fputs("\n# These environment vars might lead to 'overfitting' and hinder portability\n", f);
+      fputs("ignore_environment_var=DBUS_SESSION_BUS_ADDRESS\n", f);
+      fputs("ignore_environment_var=ORBIT_SOCKETDIR\n", f);
+      fputs("ignore_environment_var=SESSION_MANAGER\n", f);
+      fputs("ignore_environment_var=XAUTHORITY\n", f);
+      fputs("ignore_environment_var=DISPLAY\n", f);
+     
+      fclose(f);
+    }
   }
+
+
+  // do this AFTER creating cde.options
+  CDE_init_options();
+
+
+  if (CDE_exec_mode) {
+    CDE_load_environment_vars();
+  }
+  else {
+    // pgbovine - copy 'cde' executable to CDE_PACKAGE_DIR and rename
+    // it 'cde-exec', so that it can be included in the executable
+    //
+    // use /proc/self/exe since argv[0] might be simply 'cde'
+    // (if the cde binary is in $PATH and we're invoking it only by its name)
+    char* fn = format("%s/cde-exec", CDE_PACKAGE_DIR);
+    copy_file((char*)"/proc/self/exe", fn, 0777);
+    free(fn);
+
+    CDE_create_convenience_scripts(argv, optind);
+
+
+    // make a cde.log file that contains commands to reproduce original
+    // run within cde-package
+    struct stat tmp;
+    FILE* log_f;
+    char* log_filename = format("%s/cde.log", CDE_PACKAGE_DIR);
+    if (stat(log_filename, &tmp)) {
+      log_f = fopen(log_filename, "w");
+      fprintf(log_f, "cd '" CDE_ROOT_NAME "%s'", cde_starting_pwd);
+      fputc('\n', log_f);
+    }
+    else {
+      log_f = fopen(log_filename, "a");
+    }
+    free(log_filename);
+
+    fprintf(log_f, "'./%s.cde'", basename(argv[optind]));
+    int i;
+    for (i = optind + 1; argv[i] != NULL; i++) {
+      fprintf(log_f, " '%s'", argv[i]); // add quotes for accuracy
+    }
+    fputc('\n', log_f);
+    fclose(log_f);
+
+    CDE_create_path_symlink_dirs();
+
+    CDE_create_toplevel_symlink_dirs();
+
+
+    // copy /proc/self/environ to capture the FULL set of environment vars
+    char* fullenviron_fn = format("%s/cde.full-environment", CDE_PACKAGE_DIR);
+    copy_file((char*)"/proc/self/environ", fullenviron_fn, 0666);
+    free(fullenviron_fn);
+  }
+
+
 }
 
 
@@ -2893,7 +3112,7 @@ void CDE_exec_mode_early_init() {
 // at the top level of the package)
 //
 // argv[optind] is the target program's name
-void CDE_create_convenience_scripts(char** argv, int optind) {
+static void CDE_create_convenience_scripts(char** argv, int optind) {
   assert(!CDE_exec_mode);
   char* target_program_fullpath = argv[optind];
 
@@ -2979,31 +3198,31 @@ static void _add_to_array_internal(char** my_array, int* p_len, char* p, char* a
 }
 
 void CDE_add_ignore_exact_path(char* p) {
-  _add_to_array_internal(ignore_exact_paths, &ignore_exact_paths_ind, p, "ignore_exact_paths");
+  _add_to_array_internal(ignore_exact_paths, &ignore_exact_paths_ind, p, (char*)"ignore_exact_paths");
 }
 
 void CDE_add_ignore_prefix_path(char* p) {
-  _add_to_array_internal(ignore_prefix_paths, &ignore_prefix_paths_ind, p, "ignore_prefix_paths");
+  _add_to_array_internal(ignore_prefix_paths, &ignore_prefix_paths_ind, p, (char*)"ignore_prefix_paths");
 }
 
 void CDE_add_ignore_substr_path(char* p) {
-  _add_to_array_internal(ignore_substr_paths, &ignore_substr_paths_ind, p, "ignore_substr_paths");
+  _add_to_array_internal(ignore_substr_paths, &ignore_substr_paths_ind, p, (char*)"ignore_substr_paths");
 }
 
 void CDE_add_redirect_exact_path(char* p) {
-  _add_to_array_internal(redirect_exact_paths, &redirect_exact_paths_ind, p, "redirect_exact_paths");
+  _add_to_array_internal(redirect_exact_paths, &redirect_exact_paths_ind, p, (char*)"redirect_exact_paths");
 }
 
 void CDE_add_redirect_prefix_path(char* p) {
-  _add_to_array_internal(redirect_prefix_paths, &redirect_prefix_paths_ind, p, "redirect_prefix_paths");
+  _add_to_array_internal(redirect_prefix_paths, &redirect_prefix_paths_ind, p, (char*)"redirect_prefix_paths");
 }
 
 void CDE_add_redirect_substr_path(char* p) {
-  _add_to_array_internal(redirect_substr_paths, &redirect_substr_paths_ind, p, "redirect_substr_paths");
+  _add_to_array_internal(redirect_substr_paths, &redirect_substr_paths_ind, p, (char*)"redirect_substr_paths");
 }
 
 void CDE_add_ignore_envvar(char* p) {
-  _add_to_array_internal(ignore_envvars, &ignore_envvars_ind, p, "ignore_envvars");
+  _add_to_array_internal(ignore_envvars, &ignore_envvars_ind, p, (char*)"ignore_envvars");
 }
 
 
@@ -3022,7 +3241,7 @@ void CDE_add_ignore_envvar(char* p) {
 // {
 //   process_ignore_prefix=<path prefix to ignore for the given process>
 // }
-void CDE_init_options() {
+static void CDE_init_options() {
   memset(ignore_exact_paths,    0, sizeof(ignore_exact_paths));
   memset(ignore_prefix_paths,   0, sizeof(ignore_prefix_paths));
   memset(ignore_substr_paths,   0, sizeof(ignore_substr_paths));
@@ -3067,7 +3286,7 @@ void CDE_init_options() {
     // if found, copy it into the package
     if (f) {
       char* fn = format("%s/cde.options", CDE_PACKAGE_DIR);
-      copy_file("cde.options", fn, 0666);
+      copy_file((char*)"cde.options", fn, 0666);
       free(fn);
     }
     else {
@@ -3246,7 +3465,7 @@ void CDE_init_options() {
 }
 
 
-void CDE_load_environment_vars() {
+static void CDE_load_environment_vars() {
   static char cde_full_environment_abspath[MAXPATHLEN];
   strcpy(cde_full_environment_abspath, cde_pseudo_root_dir);
   strcat(cde_full_environment_abspath, "/../cde.full-environment");

@@ -53,9 +53,6 @@
 #include <limits.h>
 #include <dirent.h>
 
-#include <sys/utsname.h> // pgbovine
-#include <sys/mman.h> // pgbovine
-
 
 #ifdef LINUX
 # include <asm/unistd.h>
@@ -93,6 +90,7 @@ extern int optind;
 extern char *optarg;
 
 // pgbovine
+#include "okapi.h"
 extern char CDE_exec_mode;
 extern char CDE_provenance_mode; // -p option
 extern char CDE_verbose_mode; // -v option
@@ -100,26 +98,10 @@ extern char CDE_exec_streaming_mode; // -s option
 extern char CDE_use_linker_from_package; // ON by default, -l option to turn OFF
 extern void alloc_tcb_CDE_fields(struct tcb* tcp);
 extern void free_tcb_CDE_fields(struct tcb* tcp);
-extern void copy_file(char* src_filename, char* dst_filename, int perms);
 extern void strcpy_redirected_cderoot(char* dst, char* src);
-extern void CDE_create_path_symlink_dirs(void);
-extern void CDE_create_toplevel_symlink_dirs(void);
 extern void CDE_init_tcb_dir_fields(struct tcb* tcp);
-extern void CDE_exec_mode_early_init(void);
-extern void CDE_create_convenience_scripts(char** argv, int optind);
-extern char cde_starting_pwd[MAXPATHLEN];
-extern char cde_pseudo_root_dir[MAXPATHLEN];
-extern void CDE_init_options(void);
-extern void CDE_init_allow_paths(void);
-extern void CDE_load_environment_vars(void);
 extern FILE* CDE_copied_files_logfile;
-extern char* cde_root_cache_dir;
-#include "okapi.h"
-
-
-// only valid if !CDE_exec_mode
-char* CDE_PACKAGE_DIR = NULL;
-char* CDE_ROOT_DIR = NULL;
+extern char* CDE_PACKAGE_DIR;
 
 
 int debug = 0, followfork = 1; // pgbovine - turn on followfork by default
@@ -1133,212 +1115,7 @@ main(int argc, char *argv[])
 
   // pgbovine - do all CDE initialization here after command-line options
   // have been processed (argv[optind] is the name of the target program)
-
-  // pgbovine - initialize this before doing anything else!
-  getcwd(cde_starting_pwd, sizeof cde_starting_pwd);
-
-
-  // pgbovine - allow most promiscuous permissions for new files/directories
-  umask(0000);
-
-
-  if (CDE_exec_mode) {
-    // must do this before running CDE_init_options()
-    CDE_exec_mode_early_init();
-  }
-  else {
-    if (!CDE_PACKAGE_DIR) { // if it hasn't been set by the '-o' option, set to a default
-      CDE_PACKAGE_DIR = "cde-package";
-    }
-
-    // make this an absolute path!
-    CDE_PACKAGE_DIR = canonicalize_path(CDE_PACKAGE_DIR, cde_starting_pwd);
-    CDE_ROOT_DIR = format("%s/%s", CDE_PACKAGE_DIR, CDE_ROOT_NAME);
-    assert(IS_ABSPATH(CDE_ROOT_DIR));
-
-    mkdir(CDE_PACKAGE_DIR, 0777);
-    mkdir(CDE_ROOT_DIR, 0777);
-
-    //printf("CDE_PACKAGE_DIR: %s\n", CDE_PACKAGE_DIR);
-    //printf("CDE_ROOT_DIR: %s\n", CDE_ROOT_DIR);
-
-
-    // if we can't even create CDE_ROOT_DIR, then abort with a failure
-    struct stat cde_rootdir_stat;
-    if (stat(CDE_ROOT_DIR, &cde_rootdir_stat)) {
-      fprintf(stderr, "Error: Cannot create CDE root directory at \"%s\"\n", CDE_ROOT_DIR);
-      exit(1);
-    }
-
-
-    // collect uname information in CDE_PACKAGE_DIR/cde.uname
-    struct utsname uname_info;
-    if (uname(&uname_info) >= 0) {
-      char* fn = format("%s/cde.uname", CDE_PACKAGE_DIR);
-      FILE* uname_f = fopen(fn, "w");
-      free(fn);
-      if (uname_f) {
-        fprintf(uname_f, "uname: '%s' '%s' '%s' '%s'\n",
-                          uname_info.sysname,
-                          uname_info.release,
-                          uname_info.version,
-                          uname_info.machine);
-        fclose(uname_f);
-      }
-    }
-
-    // if cde.options doesn't yet exist, create it in pwd and seed it
-    // with default values that are useful to ignore in practice
-    //
-    // do this BEFORE CDE_init_options() so that we pick up those
-    // ignored values
-    struct stat cde_options_stat;
-    if (stat("cde.options", &cde_options_stat)) {
-      FILE* f = fopen("cde.options", "w");
-
-      fputs(CDE_OPTIONS_VERSION_NUM, f);
-      fputs(" (do not alter this first line!)\n", f);
-
-      // /dev, /proc, and /sys are special system directories with fake files
-      //
-      // some sub-directories within /var contains 'volatile' temp files
-      // that change when system is running normally
-      //
-      // (Note that it's a bit too much to simply ignore all of /var,
-      // since files in dirs like /var/lib might be required - e.g., see
-      // gnome-sudoku example)
-      //
-      // $HOME/.Xauthority is used for X11 authentication via ssh, so we need to
-      // use the REAL version and not the one in cde-root/
-      //
-      // ignore "/tmp" and "/tmp/*" since programs often put lots of
-      // session-specific stuff into /tmp so DO NOT track files within
-      // there, or else you will risk severely 'overfitting' and ruining
-      // portability across machines.  it's safe to assume that all Linux
-      // distros have a /tmp directory that anybody can write into
-      fputs("\n# These directories often contain pseudo-files that shouldn't be tracked\n", f);
-      fputs("ignore_prefix=/dev/\n", f);
-      fputs("ignore_exact=/dev\n", f);
-      fputs("ignore_prefix=/proc/\n", f);
-      fputs("ignore_exact=/proc\n", f);
-      fputs("ignore_prefix=/sys/\n", f);
-      fputs("ignore_exact=/sys\n", f);
-      fputs("ignore_prefix=/var/cache/\n", f);
-      fputs("ignore_prefix=/var/lock/\n", f);
-      fputs("ignore_prefix=/var/log/\n", f);
-      fputs("ignore_prefix=/var/run/\n", f);
-      fputs("ignore_prefix=/var/tmp/\n", f);
-      fputs("ignore_prefix=/tmp/\n", f);
-      fputs("ignore_exact=/tmp\n", f);
-
-      fputs("\n# un-comment the entries below if you think they might help your app:\n", f);
-      fputs("#ignore_exact=/etc/ld.so.cache\n", f);
-      fputs("#ignore_exact=/etc/ld.so.preload\n", f);
-      fputs("#ignore_exact=/etc/ld.so.nohwcap\n", f);
-
-      fputs("\n# Ignore .Xauthority to allow X Windows programs to work\n", f);
-      fputs("ignore_substr=.Xauthority\n", f);
-
-      // we gotta ignore /etc/resolv.conf or else Google Earth can't
-      // access the network when on another machine, so it won't work
-      // (and I think other network-facing apps might not work either!)
-      fputs("\n# Ignore so that networking can work properly\n", f);
-      fputs("ignore_exact=/etc/resolv.conf\n", f);
-
-      fputs("# These files might be useful to ignore along with /etc/resolv.conf\n", f);
-      fputs("# (un-comment if you want to try them)\n", f);
-      fputs("#ignore_exact=/etc/host.conf\n", f);
-      fputs("#ignore_exact=/etc/hosts\n", f);
-      fputs("#ignore_exact=/etc/nsswitch.conf\n", f);
-      fputs("#ignore_exact=/etc/gai.conf\n", f);
-
-      // ewencp also suggests looking into ignoring these other
-      // networking-related files:
-      /* Hmm, good point. There's probably lots -- if you're trying to
-         run a server, /etc/hostname, /etc/hosts.allow and
-         /etc/hosts.deny could all be problematic.  /etc/hosts could be
-         a problem for client or server, although its unusual to have
-         much in there. One way it could definitely be a problem is if
-         the hostname is in /etc/hosts and you want to use it as a
-         server, e.g. I run on my machine (ahoy) the server and client,
-         which appears in /etc/hosts, and then when cde-exec runs it
-         ends up returning 127.0.0.1.  But for all of these, I actually
-         don't know when the file gets read, so I'm not certain any of
-         them are really a problem. */
-
-      fputs("\n# Access the target machine's password files:\n", f);
-      fputs("# (some programs like texmacs need these lines to be commented-out,\n", f);
-      fputs("#  since they try to use home directory paths within the passwd file,\n", f);
-      fputs("#  and those paths might not exist within the package.)\n", f);
-      fputs("ignore_prefix=/etc/passwd\n", f);
-      fputs("ignore_prefix=/etc/shadow\n", f);
-
-
-      fputs("\n# These environment vars might lead to 'overfitting' and hinder portability\n", f);
-      fputs("ignore_environment_var=DBUS_SESSION_BUS_ADDRESS\n", f);
-      fputs("ignore_environment_var=ORBIT_SOCKETDIR\n", f);
-      fputs("ignore_environment_var=SESSION_MANAGER\n", f);
-      fputs("ignore_environment_var=XAUTHORITY\n", f);
-      fputs("ignore_environment_var=DISPLAY\n", f);
-     
-      fclose(f);
-    }
-  }
-
-
-  // do this AFTER creating cde.options
-  CDE_init_options();
-
-
-  if (CDE_exec_mode) {
-    CDE_load_environment_vars();
-  }
-  else {
-    // pgbovine - copy 'cde' executable to CDE_PACKAGE_DIR and rename
-    // it 'cde-exec', so that it can be included in the executable
-    //
-    // use /proc/self/exe since argv[0] might be simply 'cde'
-    // (if the cde binary is in $PATH and we're invoking it only by its name)
-    char* fn = format("%s/cde-exec", CDE_PACKAGE_DIR);
-    copy_file("/proc/self/exe", fn, 0777);
-    free(fn);
-
-    CDE_create_convenience_scripts(argv, optind);
-
-
-    // make a cde.log file that contains commands to reproduce original
-    // run within cde-package
-    struct stat tmp;
-    FILE* log_f;
-    char* log_filename = format("%s/cde.log", CDE_PACKAGE_DIR);
-    if (stat(log_filename, &tmp)) {
-      log_f = fopen(log_filename, "w");
-      fprintf(log_f, "cd '" CDE_ROOT_NAME "%s'", cde_starting_pwd);
-      fputc('\n', log_f);
-    }
-    else {
-      log_f = fopen(log_filename, "a");
-    }
-    free(log_filename);
-
-    fprintf(log_f, "'./%s.cde'", basename(argv[optind]));
-    int i;
-    for (i = optind + 1; argv[i] != NULL; i++) {
-      fprintf(log_f, " '%s'", argv[i]); // add quotes for accuracy
-    }
-    fputc('\n', log_f);
-    fclose(log_f);
-
-    CDE_create_path_symlink_dirs();
-
-    CDE_create_toplevel_symlink_dirs();
-
-
-    // copy /proc/self/environ to capture the FULL set of environment vars
-    char* fullenviron_fn = format("%s/cde.full-environment", CDE_PACKAGE_DIR);
-    copy_file("/proc/self/environ", fullenviron_fn, 0666);
-    free(fullenviron_fn);
-  }
+  CDE_init(argv, optind);
 
 
 	/* STARTUP_CHILD must be called before the signal handlers get
