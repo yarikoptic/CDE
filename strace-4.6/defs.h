@@ -29,6 +29,15 @@
  *	$Id$
  */
 
+
+// pgbovine - version number token for cde.options file
+#define CDE_OPTIONS_VERSION_NUM "# cde.options v1"
+#define CDE_ROOT_NAME "cde-root"
+// pgbovine - these are both ABSOLUTE paths
+char* CDE_PACKAGE_DIR;
+char* CDE_ROOT_DIR;
+
+
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -78,11 +87,12 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <ctype.h>
+//#include <ctype.h> // pgbovine - this eliminates the glibc 2.3 dependency!!!
 #include <string.h>
 #include <time.h>
 #include <sys/time.h>
 #include <errno.h>
+#include <sys/user.h> // pgbovine
 
 #ifdef HAVE_STDBOOL_H
 #include <stdbool.h>
@@ -339,6 +349,15 @@ extern int mp_ioctl (int f, int c, void *a, int s);
 # endif
 #endif /* LINUX */
 
+
+// for the 'ignore_process' option - pgbovine
+struct PI {
+  char* process_name;
+  char* process_ignore_prefix_paths[20];
+  int process_ignore_prefix_paths_ind;
+};
+
+
 /* Trace Control Block */
 struct tcb {
 	short flags;		/* See below for TCB_ values */
@@ -388,6 +407,43 @@ struct tcb {
 	int pfd_reg;
 	int pfd_status;
 #endif
+
+  // new fields added by pgbovine
+  // handle memory management in alloc_tcb_CDE_fields() and free_tcb_CDE_fields()
+  char* opened_filename; // non-null during a call when a file has been opened
+
+  // inherited from parent during fork()
+  // TODO: careful with memory leaks for these strdup'ed strings!
+  // if non-null, just malloc a block of size MAXPATHLEN and strcpy into it
+  char* current_dir; // REAL current directory of this child process
+
+  // if we prepended the dynamic linker to a program name to invoke it,
+  // then set this to the full program path from the original execution,
+  // which is what /proc/self/exe should return when readlink() is
+  // called on it
+  //
+  // (only valid in CDE_exec_mode, does not contain the true path
+  // within cde-root/ ... contains what the program 'perceives' is its
+  // path from the original run, which is the portion of its absolute
+  // path AFTER the cde-root/ component)
+  //
+  // inherited from parent during fork()
+  char* perceived_program_fullpath;
+
+  // Fields pertaining to the shared memory segment,
+  // which is only valid when CDE_exec_mode option is 1
+  int shmid;
+  char* localshm; // address in our address space
+  void* childshm; // address in child's address space
+  struct user_regs_struct saved_regs;
+  long savedword;      // only relevant when forcing 32-bit target processes to do shmat()
+  void* savedaddr;     // only relevant when forcing 32-bit target processes to do shmat()
+  char setting_up_shm; // 1 if we're in the process of setting up shared memory
+
+  char is_32bit_emu;   // 1 iff the target process is a 32-bit process running on a 64-bit host
+
+  struct PI* p_ignores; // point to an element within process_ignores if
+                        // this traced process has custom ignore options
 };
 
 /* TCB flags */
