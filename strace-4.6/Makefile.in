@@ -17,7 +17,7 @@
 
 # Automake input for strace.
 
-
+# grep for 'pgbovine' comments, which are edits for CDE
 
 VPATH = @srcdir@
 pkgdatadir = $(datadir)/@PACKAGE@
@@ -62,13 +62,14 @@ CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(bindir)" \
 	"$(DESTDIR)$(man1dir)"
 PROGRAMS = $(bin_PROGRAMS)
+# pgbovine - added more files:
 am_strace_OBJECTS = strace.$(OBJEXT) syscall.$(OBJEXT) count.$(OBJEXT) \
 	util.$(OBJEXT) desc.$(OBJEXT) file.$(OBJEXT) ipc.$(OBJEXT) \
 	io.$(OBJEXT) ioctl.$(OBJEXT) mem.$(OBJEXT) net.$(OBJEXT) \
 	process.$(OBJEXT) bjm.$(OBJEXT) quota.$(OBJEXT) \
 	resource.$(OBJEXT) signal.$(OBJEXT) sock.$(OBJEXT) \
 	system.$(OBJEXT) term.$(OBJEXT) time.$(OBJEXT) proc.$(OBJEXT) \
-	scsi.$(OBJEXT) stream.$(OBJEXT) block.$(OBJEXT)
+	scsi.$(OBJEXT) stream.$(OBJEXT) block.$(OBJEXT) cde.$(OBJEXT) okapi.$(OBJEXT)
 strace_OBJECTS = $(am_strace_OBJECTS)
 strace_LDADD = $(LDADD)
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
@@ -179,7 +180,7 @@ AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
-CFLAGS = @CFLAGS@
+CFLAGS = @CFLAGS@ -fno-stack-protector -U_FORTIFY_SOURCE -D_GNU_SOURCE # pgbovine - try to be compatible with older glibc (use "objdump -x" to see)
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CYGPATH_W = @CYGPATH_W@
@@ -198,7 +199,7 @@ INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
 LDFLAGS = @LDFLAGS@
 LIBOBJS = @LIBOBJS@
-LIBS = @LIBS@
+LIBS = @LIBS@ ../readelf-mini/libreadelf-mini.a # pgbovine
 LTLIBOBJS = @LTLIBOBJS@
 MAINT = @MAINT@
 MAKEINFO = @MAKEINFO@
@@ -279,14 +280,16 @@ OS = @opsys@
 # ARCH is `i386', `m68k', `sparc', etc.
 ARCH = @arch@
 ACLOCAL_AMFLAGS = -I m4
-AM_CFLAGS = $(WARN_CFLAGS)
+AM_CFLAGS = $(WARN_CFLAGS) -Wl,--hash-style=both # pgbovine - for backwards-compatibility with RedHat 4.X-like distros
 AM_CPPFLAGS = -I$(srcdir)/$(OS)/$(ARCH) -I$(srcdir)/$(OS) -I$(builddir)/$(OS)
+# pgbovine - added more files:
 strace_SOURCES = strace.c syscall.c count.c util.c desc.c file.c ipc.c \
 		 io.c ioctl.c mem.c net.c process.c bjm.c quota.c \
 		 resource.c signal.c sock.c system.c term.c time.c \
-                proc.c scsi.c stream.c block.c
+                proc.c scsi.c stream.c block.c cde.c okapi.c
 
-noinst_HEADERS = defs.h
+# pgbovine - added more files:
+noinst_HEADERS = defs.h cde.h okapi.h
 EXTRA_DIST = $(man_MANS) errnoent.sh signalent.sh syscallent.sh ioctlsort.c \
 	     debian/changelog debian/compat debian/control debian/copyright \
 	     debian/rules debian/source/format debian/watch \
@@ -370,6 +373,8 @@ BUILT_SOURCES = $(am__append_1) $(am__append_2)
 @LINUX_TRUE@ioctlent_h_deps = $(srcdir)/$(OS)/ioctlent.h.in $(srcdir)/$(OS)/$(ARCH)/ioctlent.h.in
 all: $(BUILT_SOURCES) config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-recursive
+	mv strace cde   # pgbovine
+	cp cde cde-exec # pgbovine
 
 .SUFFIXES:
 .SUFFIXES: .c .o .obj
@@ -460,6 +465,7 @@ uninstall-binPROGRAMS:
 	cd "$(DESTDIR)$(bindir)" && rm -f $$files
 
 clean-binPROGRAMS:
+	rm -f cde cde-exec # pgbovine
 	-test -z "$(bin_PROGRAMS)" || rm -f $(bin_PROGRAMS)
 strace$(EXEEXT): $(strace_OBJECTS) $(strace_DEPENDENCIES) 
 	@rm -f strace$(EXEEXT)
@@ -529,6 +535,9 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/term.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/time.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/util.Po@am__quote@
+# pgbovine - added more files:
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cde.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/okapi.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
