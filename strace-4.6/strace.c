@@ -102,6 +102,7 @@ extern void strcpy_redirected_cderoot(char* dst, char* src);
 extern void CDE_init_tcb_dir_fields(struct tcb* tcp);
 extern FILE* CDE_copied_files_logfile;
 extern char* CDE_PACKAGE_DIR;
+extern void CDE_init(char** argv, int optind);
 
 
 int debug = 0, followfork = 1; // pgbovine - turn on followfork by default
