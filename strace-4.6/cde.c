@@ -63,7 +63,6 @@ __asm__(".symver shmctl,shmctl@GLIBC_2.0"); // hack to eliminate glibc 2.2 depen
 // 0 for tracing regular execution
 char CDE_exec_mode;
 
-char CDE_provenance_mode = 0; // -p option
 char CDE_verbose_mode = 0; // -v option
 
 // only valid if !CDE_exec_mode
@@ -142,8 +141,6 @@ char CDE_use_linker_from_package = 1; // ON by default, -l option to turn OFF
 // only 1 if we are running cde-exec from OUTSIDE of a cde-root/ directory
 char cde_exec_from_outside_cderoot = 0;
 
-FILE* CDE_provenance_logfile = NULL; // only valid if -p option is used
-
 FILE* CDE_copied_files_logfile = NULL;
 
 static char cde_options_initialized = 0; // set to 1 after CDE_init_options() done
@@ -152,6 +149,7 @@ static void begin_setup_shmat(struct tcb* tcp);
 static void* find_free_addr(int pid, int exec, unsigned long size);
 
 static char* strcpy_from_child(struct tcb* tcp, long addr);
+static char* strcpy_from_child_or_null(struct tcb* tcp, long addr);
 static int ignore_path(char* filename, struct tcb* tcp);
 
 #define SHARED_PAGE_SIZE (MAXPATHLEN * 4)
@@ -523,17 +521,14 @@ extern int isspace(int c);
 // modify a single argument to the given system call
 // to a path within cde-root/, if applicable
 //
-// assumes tcp->opened_filename has already been set,
-// which will be the filename that we are redirecting
-//
 // arg_num == 1 mean modify first register arg
 // arg_num == 2 mean modify second register arg
-static void modify_syscall_single_arg(struct tcb* tcp, int arg_num) {
+static void modify_syscall_single_arg(struct tcb* tcp, int arg_num, char* filename) {
   assert(CDE_exec_mode);
-  assert(tcp->opened_filename);
+  assert(filename);
 
   char* redirected_filename =
-    redirect_filename_into_cderoot(tcp->opened_filename, tcp->current_dir, tcp);
+    redirect_filename_into_cderoot(filename, tcp->current_dir, tcp);
   if (!redirected_filename) {
     return;
   }
@@ -543,13 +538,9 @@ static void modify_syscall_single_arg(struct tcb* tcp, int arg_num) {
 
     // no more need for filename, so don't leak it
     free(redirected_filename);
-    free(tcp->opened_filename);
-    tcp->opened_filename = NULL;
 
     return; // MUST punt early here!!!
   }
-
-  //printf("  attempt to modify %s => %s\n", tcp->opened_filename, redirected_filename);
 
   // redirect all requests for absolute paths to version within cde-root/
   // if those files exist!
@@ -954,13 +945,10 @@ static char* redirect_filename_into_cderoot(char* filename, char* child_current_
 
 /* standard functionality for syscalls that take a filename as first argument
 
-  trace mode:
-    - ONLY on success, if abspath(filename) is outside pwd, then copy it
-      into cde-root/
-      - also, if filename is a symlink, then copy the target into the
-        proper location (maybe using readlink?)
+  cde (package creation) mode:
+    - if abspath(filename) is outside pwd, then copy it into cde-root/
 
-  exec mode:
+  cde-exec mode:
     - if abspath(filename) is outside pwd, then redirect it into cde-root/
 
 sys_open(filename, flags, mode)
@@ -982,69 +970,28 @@ sys_readlink(path, ...)
 
  */
 void CDE_begin_standard_fileop(struct tcb* tcp, const char* syscall_name) {
-  assert(!tcp->opened_filename);
-  tcp->opened_filename = strcpy_from_child(tcp, tcp->u_arg[0]);
+  char* filename = strcpy_from_child(tcp, tcp->u_arg[0]);
 
   if (CDE_verbose_mode) {
-    printf("BEGIN %s '%s'\n", syscall_name, tcp->opened_filename);
+    printf("[%d] BEGIN %s '%s'\n", tcp->pid, syscall_name, filename);
   }
 
   if (CDE_exec_mode) {
-    modify_syscall_single_arg(tcp, 1);
-  }
-}
-
-/* depending on value of success_type, do a different check for success
-
-   success_type = 0 - zero return value is a success (e.g., for stat)
-   success_type = 1 - non-negative return value is a success (e.g., for open or readlink)
-
- */
-void CDE_end_standard_fileop(struct tcb* tcp, const char* syscall_name,
-                             char success_type) {
-  assert(tcp->opened_filename);
-
-  if (CDE_verbose_mode) {
-    printf("END   %s '%s' (%u)\n", syscall_name, tcp->opened_filename, (unsigned int)tcp->u_rval);
-  }
- 
-
-  if (CDE_exec_mode) {
-    // empty
+    if (filename) {
+      modify_syscall_single_arg(tcp, 1, filename);
+    }
   }
   else {
-
-    if (CDE_provenance_mode) {
-      // only track open syscalls
-      if ((success_type == 1) && (tcp->u_rval >= 0) &&
-          strcmp(syscall_name, "sys_open") == 0) {
-        char* filename_abspath = canonicalize_path(tcp->opened_filename, tcp->current_dir);
-        assert(filename_abspath);
-
-        // Note: tcp->u_arg[1] is only for open(), not openat()
-        unsigned char open_mode = (tcp->u_arg[1] & 3);
-        if (open_mode == O_RDONLY) {
-          fprintf(CDE_provenance_logfile, "%d %u READ %s\n", (int)time(0), tcp->pid, filename_abspath);
-        }
-        else if (open_mode == O_WRONLY) {
-          fprintf(CDE_provenance_logfile, "%d %u WRITE %s\n", (int)time(0), tcp->pid, filename_abspath);
-        }
-        else if (open_mode == O_RDWR) {
-          fprintf(CDE_provenance_logfile, "%d %u READ-WRITE %s\n", (int)time(0), tcp->pid, filename_abspath);
-        }
-
-        free(filename_abspath);
-      }
-    }
-
-    if (((success_type == 0) && (tcp->u_rval == 0)) ||
-        ((success_type == 1) && (tcp->u_rval >= 0))) {
-      copy_file_into_cde_root(tcp->opened_filename, tcp->current_dir);
+    // pre-emptively copy the given file into cde-root/, silencing warnings for
+    // non-existent files.
+    // (Note that filename can sometimes be a JUNKY STRING due to weird race
+    //  conditions when strace is tracing complex multi-process applications)
+    if (filename) {
+      copy_file_into_cde_root(filename, tcp->current_dir);
     }
   }
 
-  free(tcp->opened_filename);
-  tcp->opened_filename = NULL;
+  free(filename);
 }
 
 
@@ -1058,9 +1005,8 @@ void CDE_end_standard_fileop(struct tcb* tcp, const char* syscall_name,
   if filepath is an absolute path, or if filepath is a relative path but
   dirfd is AT_FDCWD, then:
 
-  trace mode:
-    - ONLY on success, if abspath(filepath) is outside pwd, then copy it
-      into cde-root/
+  cde (package creation) mode:
+    - if abspath(filepath) is outside pwd, then copy it into cde-root/
 
   exec mode:
     - if abspath(filepath) is outside pwd, then redirect it into cde-root/
@@ -1068,44 +1014,44 @@ void CDE_end_standard_fileop(struct tcb* tcp, const char* syscall_name,
   issue a warning if filepath is a relative path but dirfd is NOT AT_FDCWD
 */
 void CDE_begin_at_fileop(struct tcb* tcp, const char* syscall_name) {
-  assert(!tcp->opened_filename);
-  tcp->opened_filename = strcpy_from_child(tcp, tcp->u_arg[1]);
+  char* filename = strcpy_from_child(tcp, tcp->u_arg[1]);
 
   if (CDE_verbose_mode) {
-    printf("BEGIN %s '%s' (dirfd=%u)\n", syscall_name, tcp->opened_filename, (unsigned int)tcp->u_arg[0]);
+    printf("[%d] BEGIN %s '%s' (dirfd=%u)\n", tcp->pid, syscall_name, filename, (unsigned int)tcp->u_arg[0]);
   }
 
-  if (!IS_ABSPATH(tcp->opened_filename) && tcp->u_arg[0] != AT_FDCWD) {
+  if (!IS_ABSPATH(filename) && tcp->u_arg[0] != AT_FDCWD) {
     fprintf(stderr,
             "CDE WARNING (unsupported operation): %s '%s' is a relative path and dirfd != AT_FDCWD\n",
-            syscall_name, tcp->opened_filename);
-    return; // punt early!
+            syscall_name, filename);
+    goto done; // punt early!
   }
 
   if (CDE_exec_mode) {
-    modify_syscall_single_arg(tcp, 2);
+    modify_syscall_single_arg(tcp, 2, filename);
   }
-}
-
-// we currently do the same thing as CDE_end_standard_fileop
-void CDE_end_at_fileop(struct tcb* tcp, const char* syscall_name,
-                       char success_type) {
-  // punt early for this special case (see CDE_begin_at_fileop)
-  if (!IS_ABSPATH(tcp->opened_filename) && tcp->u_arg[0] != AT_FDCWD) {
-    free(tcp->opened_filename);
-    tcp->opened_filename = NULL;
-    return;
+  else {
+    // pre-emptively copy the given file into cde-root/, silencing warnings for
+    // non-existent files.
+    // (Note that filename can sometimes be a JUNKY STRING due to weird race
+    //  conditions when strace is tracing complex multi-process applications)
+    copy_file_into_cde_root(filename, tcp->current_dir);
   }
 
-  CDE_end_standard_fileop(tcp, syscall_name, success_type);
+done:
+  free(filename);
 }
 
 
+// input_buffer_arg_index is the index of the input filename argument
 // output_buffer_arg_index is the index of the argument where the output
 // buffer is being held (we clobber this in some special cases)
-static void CDE_end_readlink_internal(struct tcb* tcp, int output_buffer_arg_index) {
-  assert(tcp->opened_filename);
- 
+//
+// TODO: we also need to un-munge symlinks to absolute paths that have been munged into
+// relative paths when they were copied into cde-root/ (e.g., "../../lib/libc.so.6")
+static void CDE_end_readlink_internal(struct tcb* tcp, int input_buffer_arg_index, int output_buffer_arg_index) {
+  char* filename = strcpy_from_child(tcp, tcp->u_arg[input_buffer_arg_index]);
+
   if (CDE_exec_mode) {
     if (tcp->u_rval >= 0) {
       // super hack!  if the program is trying to access the special
@@ -1116,7 +1062,7 @@ static void CDE_end_readlink_internal(struct tcb* tcp, int output_buffer_arg_ind
       // programs like 'java' rely on the value of /proc/self/exe
       // being the true path to the executable, in order to dynamically
       // load libraries based on paths relative to that full path!
-      char is_proc_self_exe = (strcmp(tcp->opened_filename, "/proc/self/exe") == 0);
+      char is_proc_self_exe = (strcmp(filename, "/proc/self/exe") == 0);
 
       // another super hack!  programs like Google Earth
       // ('googleearth-bin') access /proc/self/exe as /proc/<pid>/exe
@@ -1128,7 +1074,7 @@ static void CDE_end_readlink_internal(struct tcb* tcp, int output_buffer_arg_ind
       // a basis for dynamically loading libraries, so we must properly
       // 'fake' this value)
       char* self_pid_name = format("/proc/%d/exe", tcp->pid);
-      char is_proc_self_pid_exe = (strcmp(tcp->opened_filename, self_pid_name) == 0);
+      char is_proc_self_pid_exe = (strcmp(filename, self_pid_name) == 0);
       free(self_pid_name);
 
       if ((is_proc_self_exe || is_proc_self_pid_exe) &&
@@ -1156,7 +1102,7 @@ static void CDE_end_readlink_internal(struct tcb* tcp, int output_buffer_arg_ind
       // a CDE_end_getcwd call, returning a fake cwd:
       //
       // (note that we don't handle /proc/<pid>/cwd yet)
-      else if (strcmp(tcp->opened_filename, "/proc/self/cwd") == 0) {
+      else if (strcmp(filename, "/proc/self/cwd") == 0) {
         // copied from CDE_end_getcwd
         char* sandboxed_pwd = extract_sandboxed_pwd(tcp->current_dir, tcp);
         memcpy_to_child(tcp->pid, (char*)tcp->u_arg[output_buffer_arg_index],
@@ -1179,35 +1125,33 @@ static void CDE_end_readlink_internal(struct tcb* tcp, int output_buffer_arg_ind
       }
     }
   }
-  else {
-    if (tcp->u_rval >= 0) {
-      copy_file_into_cde_root(tcp->opened_filename, tcp->current_dir);
-    }
-  }
 
-  free(tcp->opened_filename);
-  tcp->opened_filename = NULL;
+  free(filename);
 }
 
 void CDE_end_readlink(struct tcb* tcp) {
   // output buffer is second argument (index 1)
-  CDE_end_readlink_internal(tcp, 1);
+  CDE_end_readlink_internal(tcp, 0, 1);
 }
 
 void CDE_end_readlinkat(struct tcb* tcp) {
   // output buffer is third argument (index 2)
-  CDE_end_readlink_internal(tcp, 2);
+  CDE_end_readlink_internal(tcp, 1, 2);
 }
 
 
 void CDE_begin_execve(struct tcb* tcp) {
+  // null all these out up-top, then deallocate them in 'done'
+  char* exe_filename = NULL;
+  char* redirected_path = NULL;
+  char* exe_filename_abspath = NULL;
+  char* script_command = NULL;
   char* ld_linux_filename = NULL;
   char* ld_linux_fullpath = NULL;
 
-  assert(!tcp->opened_filename);
-  tcp->opened_filename = strcpy_from_child(tcp, tcp->u_arg[0]);
+  exe_filename = strcpy_from_child(tcp, tcp->u_arg[0]);
 
-  // only attempt to do the ld-linux.so.2 trick if tcp->opened_filename
+  // only attempt to do the ld-linux.so.2 trick if exe_filename
   // is a valid executable file ... otherwise don't do
   // anything and simply let the execve fail just like it's supposed to
   struct stat filename_stat;
@@ -1217,10 +1161,9 @@ void CDE_begin_execve(struct tcb* tcp) {
   tcp->p_ignores = NULL;
 
   if (CDE_verbose_mode) {
-    printf("CDE_begin_execve '%s'\n", tcp->opened_filename);
+    printf("[%d] CDE_begin_execve '%s'\n", tcp->pid, exe_filename);
   }
 
-  char* redirected_path = NULL;
   if (CDE_exec_mode) {
     // if we're purposely ignoring a path to an executable (e.g.,
     // ignoring "/bin/bash" to prevent crashes on certain Ubuntu
@@ -1229,14 +1172,14 @@ void CDE_begin_execve(struct tcb* tcp) {
     //
     // (note that this check doesn't pick up the case when a textual script
     //  is being executed (e.g., with "#!/bin/bash" as its shebang line),
-    //  since tcp->opened_filename is the script's name and NOT "/bin/bash".
+    //  since exe_filename is the script's name and NOT "/bin/bash".
     //  We will need to handle this case LATER in the function.)
     char* opened_filename_abspath =
-      canonicalize_path(tcp->opened_filename, extract_sandboxed_pwd(tcp->current_dir, tcp));
+      canonicalize_path(exe_filename, extract_sandboxed_pwd(tcp->current_dir, tcp));
 
     if (ignore_path(opened_filename_abspath, tcp)) {
       free(opened_filename_abspath);
-      return;
+      goto done;
     }
 
     // check for presence in process_ignores, and if found, set
@@ -1247,34 +1190,31 @@ void CDE_begin_execve(struct tcb* tcp) {
         //printf("IGNORED '%s'\n", opened_filename_abspath);
         tcp->p_ignores = &process_ignores[i];
         free(opened_filename_abspath);
-        return; // TOTALLY PUNT!!!
+        goto done; // TOTALLY PUNT!!!
       }
     }
 
     free(opened_filename_abspath);
 
-    redirected_path = redirect_filename_into_cderoot(tcp->opened_filename, tcp->current_dir, tcp);
+    redirected_path = redirect_filename_into_cderoot(exe_filename, tcp->current_dir, tcp);
   }
 
   char* path_to_executable = NULL;
-  char* exe_filename_abspath = NULL;
 
   if (redirected_path) {
     // TODO: we don't check whether it's a real executable file :/
     if (stat(redirected_path, &filename_stat) != 0) {
-      free(redirected_path);
-      return;
+      goto done;
     }
     path_to_executable = redirected_path;
   }
   else {
     // just check the file itself (REMEMBER TO GET ITS ABSOLUTE PATH!)
-    exe_filename_abspath = canonicalize_path(tcp->opened_filename, tcp->current_dir);
+    exe_filename_abspath = canonicalize_path(exe_filename, tcp->current_dir);
 
     // TODO: we don't check whether it's a real executable file :/
     if (stat(exe_filename_abspath, &filename_stat) != 0) {
-      free(exe_filename_abspath);
-      return;
+      goto done;
     }
     path_to_executable = exe_filename_abspath;
   }
@@ -1292,7 +1232,6 @@ void CDE_begin_execve(struct tcb* tcp) {
   // e.g., #! /usr/bin/env python
   char is_textual_script = 0;
   char is_elf_binary = 0;
-  char* script_command = NULL;
 
   FILE* f = fopen(path_to_executable, "rb"); // open in binary mode
   assert(f);
@@ -1318,7 +1257,10 @@ void CDE_begin_execve(struct tcb* tcp) {
       // binary, so let the execve call proceed normally
       if (CDE_exec_mode) {
         // redirect the executable's path to within $CDE_ROOT_DIR:
-        modify_syscall_single_arg(tcp, 1);
+        modify_syscall_single_arg(tcp, 1, exe_filename);
+      }
+      else {
+        copy_file_into_cde_root(exe_filename, tcp->current_dir);
       }
 
       // remember to EXIT EARLY!
@@ -1374,7 +1316,7 @@ void CDE_begin_execve(struct tcb* tcp) {
       if (ignore_path(script_command_abspath, tcp)) {
         free(script_command_abspath);
         free(tmp);
-        return; // PUNT!
+        goto done; // PUNT!
       }
 
       // check for presence in process_ignores, and if found, set
@@ -1386,7 +1328,7 @@ void CDE_begin_execve(struct tcb* tcp) {
           tcp->p_ignores = &process_ignores[i];
           free(script_command_abspath);
           free(tmp);
-          return; // TOTALLY PUNT!!!
+          goto done; // TOTALLY PUNT!!!
         }
       }
 
@@ -1412,7 +1354,7 @@ void CDE_begin_execve(struct tcb* tcp) {
       // need to do something better here (think harder about this case!)
       if (CDE_exec_mode) {
         // redirect the executable's path to within cde-root/:
-        modify_syscall_single_arg(tcp, 1);
+        modify_syscall_single_arg(tcp, 1, exe_filename);
       }
 
       goto done;
@@ -1426,10 +1368,6 @@ void CDE_begin_execve(struct tcb* tcp) {
     // set up shared memory segment if we haven't done so yet
     if (!tcp->childshm) {
       begin_setup_shmat(tcp);
-
-      // no more need for filename, so don't leak it
-      free(tcp->opened_filename);
-      tcp->opened_filename = NULL;
 
       goto done; // MUST punt early here!!!
     }
@@ -1783,7 +1721,7 @@ void CDE_begin_execve(struct tcb* tcp) {
       }
       else {
         // simply redirect the executable's path to within cde-root/:
-        modify_syscall_single_arg(tcp, 1);
+        modify_syscall_single_arg(tcp, 1, exe_filename);
       }
     }
 
@@ -1810,9 +1748,10 @@ void CDE_begin_execve(struct tcb* tcp) {
         free(old_perceived_program_fullpath);
       }
     }
-
   }
   else {
+    copy_file_into_cde_root(exe_filename, tcp->current_dir);
+
     if (ld_linux_filename) {
       // copy ld-linux.so.2 (or whatever the program interpreter is) into cde-root
       copy_file_into_cde_root(ld_linux_filename, tcp->current_dir);
@@ -1832,9 +1771,15 @@ void CDE_begin_execve(struct tcb* tcp) {
         break;
       }
     }
+
   }
 
 done:
+  // make sure ALL of these vars are initially set to NULL when declared:
+  if (exe_filename) {
+    free(exe_filename);
+  }
+
   if (redirected_path) {
     free(redirected_path);
   }
@@ -1858,7 +1803,9 @@ done:
 
 
 void CDE_end_execve(struct tcb* tcp) {
-  assert(tcp->opened_filename);
+  if (CDE_verbose_mode) {
+    printf("[%d] CDE_end_execve\n", tcp->pid);
+  }
 
   if (CDE_exec_mode) {
     // WOW, what a gross hack!  execve detaches all shared memory
@@ -1866,114 +1813,88 @@ void CDE_end_execve(struct tcb* tcp) {
     // that begin_setup_shmat() will be called again
     tcp->childshm = NULL;
   }
-  else {
-    // return value of 0 means a successful call
-    if (tcp->u_rval == 0) {
-
-      if (CDE_provenance_mode) {
-        char* filename_abspath = canonicalize_path(tcp->opened_filename, tcp->current_dir);
-        assert(filename_abspath);
-        fprintf(CDE_provenance_logfile, "%d %u EXECVE %s\n", (int)time(0), tcp->pid, filename_abspath);
-        free(filename_abspath);
-      }
-
-      copy_file_into_cde_root(tcp->opened_filename, tcp->current_dir);
-    }
-  }
-
-  free(tcp->opened_filename);
-  tcp->opened_filename = NULL;
 }
 
 
 void CDE_begin_file_unlink(struct tcb* tcp) {
-  assert(!tcp->opened_filename);
-  tcp->opened_filename = strcpy_from_child(tcp, tcp->u_arg[0]);
-  //printf("CDE_begin_file_unlink %s\n", tcp->opened_filename);
+  char* filename = strcpy_from_child(tcp, tcp->u_arg[0]);
+
+  if (CDE_verbose_mode) {
+    printf("[%d] BEGIN unlink '%s'\n", tcp->pid, filename);
+  }
 
   if (CDE_exec_mode) {
-    modify_syscall_single_arg(tcp, 1);
+    modify_syscall_single_arg(tcp, 1, filename);
   }
   else {
-    char* redirected_path =
-      redirect_filename_into_cderoot(tcp->opened_filename, tcp->current_dir, tcp);
+    char* redirected_path = redirect_filename_into_cderoot(filename, tcp->current_dir, tcp);
     if (redirected_path) {
       unlink(redirected_path);
       free(redirected_path);
     }
   }
-
-  // no need for this anymore
-  free(tcp->opened_filename);
-  tcp->opened_filename = NULL;
 }
 
 // copy-and-paste from CDE_begin_file_unlink,
 // except adjusting for unlinkat signature:
 //   int unlinkat(int dirfd, const char *pathname, int flags);
 void CDE_begin_file_unlinkat(struct tcb* tcp) {
-  assert(!tcp->opened_filename);
-  tcp->opened_filename = strcpy_from_child(tcp, tcp->u_arg[1]);
+  char* filename = strcpy_from_child(tcp, tcp->u_arg[1]);
 
-  if (!IS_ABSPATH(tcp->opened_filename) && tcp->u_arg[0] != AT_FDCWD) {
-    fprintf(stderr,
-            "CDE WARNING: unlinkat '%s' is a relative path and dirfd != AT_FDCWD\n",
-            tcp->opened_filename);
-    goto done; // punt early!
+  if (CDE_verbose_mode) {
+    printf("[%d] BEGIN unlinkat '%s'\n", tcp->pid, filename);
+  }
+
+  if (!IS_ABSPATH(filename) && tcp->u_arg[0] != AT_FDCWD) {
+    fprintf(stderr, "CDE WARNING: unlinkat '%s' is a relative path and dirfd != AT_FDCWD\n", filename);
+    return; // punt early!
   }
 
   if (CDE_exec_mode) {
-    modify_syscall_single_arg(tcp, 2);
+    modify_syscall_single_arg(tcp, 2, filename);
   }
   else {
-    char* redirected_path =
-      redirect_filename_into_cderoot(tcp->opened_filename, tcp->current_dir, tcp);
+    char* redirected_path = redirect_filename_into_cderoot(filename, tcp->current_dir, tcp);
     if (redirected_path) {
       unlink(redirected_path);
       free(redirected_path);
     }
   }
-
-
-done:
-  // no need for this anymore
-  free(tcp->opened_filename);
-  tcp->opened_filename = NULL;
 }
 
 
 void CDE_begin_file_link(struct tcb* tcp) {
-  //printf("CDE_begin_file_link\n");
+  if (CDE_verbose_mode) {
+    printf("[%d] BEGIN link\n", tcp->pid);
+  }
+
   if (CDE_exec_mode) {
     modify_syscall_two_args(tcp);
   }
-}
-
-void CDE_end_file_link(struct tcb* tcp) {
-  if (CDE_exec_mode) {
-    // empty
-  }
   else {
-    if (tcp->u_rval == 0) {
-      char* filename1 = strcpy_from_child(tcp, tcp->u_arg[0]);
-      char* redirected_filename1 =
-        redirect_filename_into_cderoot(filename1, tcp->current_dir, tcp);
-      // first copy the origin file into cde-root/ before trying to link it
-      copy_file_into_cde_root(filename1, tcp->current_dir);
+    // just try to do the link operation within the CDE package
+    // TODO: is this too early since the original link hasn't been done yet?
+    // (I don't think so ...)
 
-      char* filename2 = strcpy_from_child(tcp, tcp->u_arg[1]);
-      char* redirected_filename2 =
-        redirect_filename_into_cderoot(filename2, tcp->current_dir, tcp);
+    char* filename1 = strcpy_from_child(tcp, tcp->u_arg[0]);
+    char* redirected_filename1 =
+      redirect_filename_into_cderoot(filename1, tcp->current_dir, tcp);
+    // first copy the origin file into cde-root/ before trying to link it
+    copy_file_into_cde_root(filename1, tcp->current_dir);
 
-      link(redirected_filename1, redirected_filename2);
+    char* filename2 = strcpy_from_child(tcp, tcp->u_arg[1]);
+    char* redirected_filename2 =
+      redirect_filename_into_cderoot(filename2, tcp->current_dir, tcp);
 
-      free(filename1);
-      free(filename2);
-      free(redirected_filename1);
-      free(redirected_filename2);
-    }
+    link(redirected_filename1, redirected_filename2);
+
+    free(filename1);
+    free(filename2);
+    free(redirected_filename1);
+    free(redirected_filename2);
   }
 }
+
 
 // copy-and-paste from file_link functions above,
 // except adjusting for linkat signature:
@@ -1981,6 +1902,10 @@ void CDE_end_file_link(struct tcb* tcp) {
 void CDE_begin_file_linkat(struct tcb* tcp) {
   char* oldpath = strcpy_from_child(tcp, tcp->u_arg[1]);
   char* newpath = strcpy_from_child(tcp, tcp->u_arg[3]);
+
+  if (CDE_verbose_mode) {
+    printf("[%d] BEGIN linkat(%s, %s)\n", tcp->pid, oldpath, newpath);
+  }
 
   if (!IS_ABSPATH(oldpath) && tcp->u_arg[0] != AT_FDCWD) {
     fprintf(stderr,
@@ -1995,8 +1920,25 @@ void CDE_begin_file_linkat(struct tcb* tcp) {
     goto done; // punt early!
   }
 
+
   if (CDE_exec_mode) {
     modify_syscall_second_and_fourth_args(tcp);
+  }
+  else {
+    // just try to do the link operation within the CDE package
+    // TODO: is this too early since the original link hasn't been done yet?
+    // (I don't think so ...)
+    //
+    char* redirected_oldpath = redirect_filename_into_cderoot(oldpath, tcp->current_dir, tcp);
+    // first copy the origin file into cde-root/ before trying to link it
+    copy_file_into_cde_root(oldpath, tcp->current_dir);
+
+    char* redirected_newpath = redirect_filename_into_cderoot(newpath, tcp->current_dir, tcp);
+
+    link(redirected_oldpath, redirected_newpath);
+
+    free(redirected_oldpath);
+    free(redirected_newpath);
   }
 
 done:
@@ -2004,57 +1946,28 @@ done:
   free(newpath);
 }
 
-void CDE_end_file_linkat(struct tcb* tcp) {
-  if (CDE_exec_mode) {
-    // empty
-  }
-  else {
-    if (tcp->u_rval == 0) {
-      char* filename1 = strcpy_from_child(tcp, tcp->u_arg[1]);
-      char* redirected_filename1 =
-        redirect_filename_into_cderoot(filename1, tcp->current_dir, tcp);
-      // first copy the origin file into cde-root/ before trying to link it
-      copy_file_into_cde_root(filename1, tcp->current_dir);
-
-      char* filename2 = strcpy_from_child(tcp, tcp->u_arg[3]);
-      char* redirected_filename2 =
-        redirect_filename_into_cderoot(filename2, tcp->current_dir, tcp);
-
-      link(redirected_filename1, redirected_filename2);
-
-      free(filename1);
-      free(filename2);
-      free(redirected_filename1);
-      free(redirected_filename2);
-    }
-  }
-}
-
 
 void CDE_begin_file_symlink(struct tcb* tcp) {
-  //printf("CDE_begin_file_symlink\n");
+  if (CDE_verbose_mode) {
+    printf("[%d] BEGIN symlink\n", tcp->pid);
+  }
+
   if (CDE_exec_mode) {
     modify_syscall_two_args(tcp);
   }
-}
-
-void CDE_end_file_symlink(struct tcb* tcp) {
-  if (CDE_exec_mode) {
-    // empty
-  }
   else {
-    if (tcp->u_rval == 0) {
-      char* oldname = strcpy_from_child(tcp, tcp->u_arg[0]);
-      char* newname = strcpy_from_child(tcp, tcp->u_arg[1]);
-      char* newname_redirected =
-        redirect_filename_into_cderoot(newname, tcp->current_dir, tcp);
+    // TODO: what about properly munging symlinks to absolute paths inside of
+    // the CDE package?  e.g., if you symlink to '/lib/libc.so.6', perhaps that
+    // path should be munged to '../../lib/libc.so.6' within the CDE package???
+    char* oldname = strcpy_from_child(tcp, tcp->u_arg[0]);
+    char* newname = strcpy_from_child(tcp, tcp->u_arg[1]);
+    char* newname_redirected = redirect_filename_into_cderoot(newname, tcp->current_dir, tcp);
 
-      symlink(oldname, newname_redirected);
+    symlink(oldname, newname_redirected);
 
-      free(oldname);
-      free(newname);
-      free(newname_redirected);
-    }
+    free(oldname);
+    free(newname);
+    free(newname_redirected);
   }
 }
 
@@ -2063,51 +1976,49 @@ void CDE_end_file_symlink(struct tcb* tcp) {
 // except adjusting for symlinkat signature:
 //   symlinkat(char* oldpath, int newdirfd, char* newpath);
 void CDE_begin_file_symlinkat(struct tcb* tcp) {
+  if (CDE_verbose_mode) {
+    printf("[%d] BEGIN symlinkat\n", tcp->pid);
+  }
+
   char* newpath = strcpy_from_child(tcp, tcp->u_arg[2]);
 
   if (!IS_ABSPATH(newpath) && tcp->u_arg[1] != AT_FDCWD) {
-    fprintf(stderr,
-            "CDE WARNING: symlinkat '%s' is a relative path and dirfd != AT_FDCWD\n",
-            newpath);
+    fprintf(stderr, "CDE WARNING: symlinkat '%s' is a relative path and dirfd != AT_FDCWD\n", newpath);
     free(newpath);
     return; // punt early!
   }
-  
+
   if (CDE_exec_mode) {
     modify_syscall_first_and_third_args(tcp);
+  }
+  else {
+    char* oldname = strcpy_from_child(tcp, tcp->u_arg[0]);
+    char* newpath_redirected = redirect_filename_into_cderoot(newpath, tcp->current_dir, tcp);
+    symlink(oldname, newpath_redirected);
+
+    free(oldname);
+    free(newpath_redirected);
   }
 
   free(newpath);
 }
 
-void CDE_end_file_symlinkat(struct tcb* tcp) {
-  if (CDE_exec_mode) {
-    // empty
-  }
-  else {
-    if (tcp->u_rval == 0) {
-      char* oldname = strcpy_from_child(tcp, tcp->u_arg[0]);
-      char* newname = strcpy_from_child(tcp, tcp->u_arg[2]);
-      char* newname_redirected =
-        redirect_filename_into_cderoot(newname, tcp->current_dir, tcp);
-
-      symlink(oldname, newname_redirected);
-
-      free(oldname);
-      free(newname);
-      free(newname_redirected);
-    }
-  }
-}
-
 
 void CDE_begin_file_rename(struct tcb* tcp) {
+  if (CDE_verbose_mode) {
+    printf("[%d] BEGIN rename\n", tcp->pid);
+  }
+
   if (CDE_exec_mode) {
     modify_syscall_two_args(tcp);
   }
 }
 
 void CDE_end_file_rename(struct tcb* tcp) {
+  if (CDE_verbose_mode) {
+    printf("[%d] END rename\n", tcp->pid);
+  }
+
   if (CDE_exec_mode) {
     // empty
   }
@@ -2136,6 +2047,10 @@ void CDE_end_file_rename(struct tcb* tcp) {
 // except adjusting for linkat signature:
 //   renameat(int olddirfd, char* oldpath, int newdirfd, char* newpath);
 void CDE_begin_file_renameat(struct tcb* tcp) {
+  if (CDE_verbose_mode) {
+    printf("[%d] BEGIN renameat\n", tcp->pid);
+  }
+
   char* oldpath = strcpy_from_child(tcp, tcp->u_arg[1]);
   char* newpath = strcpy_from_child(tcp, tcp->u_arg[3]);
 
@@ -2162,6 +2077,10 @@ done:
 }
 
 void CDE_end_file_renameat(struct tcb* tcp) {
+  if (CDE_verbose_mode) {
+    printf("[%d] END renameat\n", tcp->pid);
+  }
+
   if (CDE_exec_mode) {
     // empty
   }
@@ -2192,14 +2111,8 @@ void CDE_begin_chdir(struct tcb* tcp) {
 
 void CDE_end_fchdir(struct tcb* tcp);
 
-// don't forget that tcp->opened_filename has been initialized here
 void CDE_end_chdir(struct tcb* tcp) {
-  assert(tcp->opened_filename);
-
   CDE_end_fchdir(tcp); // this will update tcp->current_dir
-
-  free(tcp->opened_filename);
-  tcp->opened_filename = NULL;
 }
 
 void CDE_end_fchdir(struct tcb* tcp) {
@@ -2236,22 +2149,26 @@ void CDE_begin_mkdir(struct tcb* tcp) {
   CDE_begin_standard_fileop(tcp, "mkdir");
 }
 
-void CDE_end_mkdir(struct tcb* tcp) {
-  assert(tcp->opened_filename);
+void CDE_end_mkdir(struct tcb* tcp, int input_buffer_arg_index) {
+  if (CDE_verbose_mode) {
+    printf("[%d] END mkdir*\n", tcp->pid);
+  }
 
   if (CDE_exec_mode) {
     // empty
   }
   else {
-    // always mkdir even if the call fails
-    // (e.g., because the directory already exists)
-    char* dirname_abspath = canonicalize_path(tcp->opened_filename, tcp->current_dir);
-    make_mirror_dirs_in_cde_package(dirname_abspath, 0);
-    free(dirname_abspath);
+    // mkdir either when the call succeeds or only fails because the
+    // directory already exists
+    if ((tcp->u_rval == 0) || (tcp->u_rval == EEXIST)) {
+      // sometimes mkdir is called with a BOGUS argument, so silently skip those cases
+      char* dirname_arg = strcpy_from_child(tcp, tcp->u_arg[input_buffer_arg_index]);
+      char* dirname_abspath = canonicalize_path(dirname_arg, tcp->current_dir);
+      make_mirror_dirs_in_cde_package(dirname_abspath, 0);
+      free(dirname_abspath);
+      free(dirname_arg);
+    }
   }
-
-  free(tcp->opened_filename);
-  tcp->opened_filename = NULL;
 }
 
 // copy-and-paste from mkdir functions above,
@@ -2262,7 +2179,7 @@ void CDE_begin_mkdirat(struct tcb* tcp) {
 }
 
 void CDE_end_mkdirat(struct tcb* tcp) {
-  CDE_end_mkdir(tcp);
+  CDE_end_mkdir(tcp, 1);
 }
 
 
@@ -2270,25 +2187,26 @@ void CDE_begin_rmdir(struct tcb* tcp) {
   CDE_begin_standard_fileop(tcp, "rmdir");
 }
 
-void CDE_end_rmdir(struct tcb* tcp) {
-  assert(tcp->opened_filename);
+void CDE_end_rmdir(struct tcb* tcp, int input_buffer_arg_index) {
+  if (CDE_verbose_mode) {
+    printf("[%d] END rmdir*\n", tcp->pid);
+  }
 
   if (CDE_exec_mode) {
     // empty
   }
   else {
     if (tcp->u_rval == 0) {
+      char* dirname_arg = strcpy_from_child(tcp, tcp->u_arg[input_buffer_arg_index]);
       char* redirected_path =
-        redirect_filename_into_cderoot(tcp->opened_filename, tcp->current_dir, tcp);
+        redirect_filename_into_cderoot(dirname_arg, tcp->current_dir, tcp);
       if (redirected_path) {
         rmdir(redirected_path);
         free(redirected_path);
       }
+      free(dirname_arg);
     }
   }
-
-  free(tcp->opened_filename);
-  tcp->opened_filename = NULL;
 }
 
 
@@ -2297,7 +2215,7 @@ void CDE_begin_unlinkat_rmdir(struct tcb* tcp) {
 }
 
 void CDE_end_unlinkat_rmdir(struct tcb* tcp) {
-  CDE_end_rmdir(tcp);
+  CDE_end_rmdir(tcp, 1);
 }
 
 
@@ -2573,12 +2491,23 @@ void strcpy_redirected_cderoot(char* dst, char* src) {
   }
 }
 
-// malloc a new string from child
-static char* strcpy_from_child(struct tcb* tcp, long addr) {
+// malloc a new string from child, and return NULL on failure
+static char* strcpy_from_child_or_null(struct tcb* tcp, long addr) {
   char path[MAXPATHLEN];
-  EXITIF(umovestr(tcp, addr, sizeof path, path) < 0);
+  if (umovestr(tcp, addr, sizeof path, path) < 0) {
+    return NULL;
+  }
+
   return strdup(path);
 }
+
+// aborts the program if there's an error in strcpy_from_child_or_null
+static char* strcpy_from_child(struct tcb* tcp, long addr) {
+  char* ret = strcpy_from_child_or_null(tcp, addr);
+  EXITIF(ret == NULL);
+  return ret;
+}
+
 
 // adapted from the Goanna project by Spillane et al.
 // dst_in_child is a pointer in the child's address space
@@ -2758,12 +2687,6 @@ void CDE_init_tcb_dir_fields(struct tcb* tcp) {
     // inherit from parent since you're executing the same program after
     // forking (at least until you do an exec)
     tcp->p_ignores = tcp->parent->p_ignores;
-
-
-    // TODO: I don't know whether this covers all the cases of process forking ...
-    if (CDE_provenance_mode) {
-      fprintf(CDE_provenance_logfile, "%d %u SPAWN %u\n", (int)time(0), tcp->parent->pid, tcp->pid);
-    }
   }
   else {
     // otherwise create fresh fields derived from master (cde) process
@@ -2856,6 +2779,10 @@ void CDE_init(char** argv, int optind) {
   // pgbovine - initialize this before doing anything else!
   getcwd(cde_starting_pwd, sizeof cde_starting_pwd);
 
+
+  // suppress (most) okapi warnings to prevent terminal noise
+  extern char OKAPI_VERBOSE;
+  OKAPI_VERBOSE = 0;
 
   // pgbovine - allow most promiscuous permissions for new files/directories
   umask(0000);
@@ -3566,6 +3493,10 @@ static void CDE_load_environment_vars() {
 // if we're running in CDE_exec_mode, redirect path argument for bind()
 // and connect() into cde-root sandbox
 void CDE_begin_socket_bind_or_connect(struct tcb *tcp) {
+  if (CDE_verbose_mode) {
+    printf("[%d] BEGIN socket bind/connect\n", tcp->pid);
+  }
+
   // only do this redirection in CDE_exec_mode
   if (!CDE_exec_mode) {
     return;
@@ -3574,7 +3505,7 @@ void CDE_begin_socket_bind_or_connect(struct tcb *tcp) {
   // code adapted from printsock in strace-4.5.20/net.c
   long addr = tcp->u_arg[1];
   int addrlen = tcp->u_arg[2];
- 
+
   union {
     char pad[128];
     struct sockaddr sa;

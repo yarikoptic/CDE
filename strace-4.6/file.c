@@ -34,28 +34,19 @@
 
 // pgbovine
 extern void CDE_begin_standard_fileop(struct tcb* tcp, const char* syscall_name);
-extern void CDE_end_standard_fileop(struct tcb* tcp, const char* syscall_name,
-                                    char success_type);
-
 extern void CDE_begin_at_fileop(struct tcb* tcp, const char* syscall_name);
-extern void CDE_end_at_fileop(struct tcb* tcp, const char* syscall_name,
-                              char success_type);
 
 extern void CDE_begin_file_unlink(struct tcb* tcp);
 extern void CDE_begin_file_unlinkat(struct tcb* tcp);
 
 extern void CDE_begin_file_link(struct tcb* tcp);
-extern void CDE_end_file_link(struct tcb* tcp);
 extern void CDE_begin_file_linkat(struct tcb* tcp);
-extern void CDE_end_file_linkat(struct tcb* tcp);
 
 extern void CDE_end_readlink(struct tcb* tcp);
 extern void CDE_end_readlinkat(struct tcb* tcp);
 
 extern void CDE_begin_file_symlink(struct tcb* tcp);
-extern void CDE_end_file_symlink(struct tcb* tcp);
 extern void CDE_begin_file_symlinkat(struct tcb* tcp);
-extern void CDE_end_file_symlinkat(struct tcb* tcp);
 
 extern void CDE_begin_file_rename(struct tcb* tcp);
 extern void CDE_end_file_rename(struct tcb* tcp);
@@ -67,12 +58,12 @@ extern void CDE_end_chdir(struct tcb* tcp);
 extern void CDE_end_fchdir(struct tcb* tcp);
 
 extern void CDE_begin_mkdir(struct tcb* tcp);
-extern void CDE_end_mkdir(struct tcb* tcp);
+extern void CDE_end_mkdir(struct tcb* tcp, int input_buffer_arg_index);
 extern void CDE_begin_mkdirat(struct tcb* tcp);
 extern void CDE_end_mkdirat(struct tcb* tcp);
 
 extern void CDE_begin_rmdir(struct tcb* tcp);
-extern void CDE_end_rmdir(struct tcb* tcp);
+extern void CDE_end_rmdir(struct tcb* tcp, int input_buffer_arg_index);
 extern void CDE_begin_unlinkat_rmdir(struct tcb* tcp);
 extern void CDE_end_unlinkat_rmdir(struct tcb* tcp);
 
@@ -82,17 +73,11 @@ extern void CDE_end_getcwd(struct tcb* tcp);
 #define CDE_standard_fileop_macro(tcp, success_type) \
   if (entering(tcp)) { \
     CDE_begin_standard_fileop(tcp, __FUNCTION__); \
-  } \
-  else { \
-    CDE_end_standard_fileop(tcp, __FUNCTION__, success_type); \
   }
 
 #define CDE_at_fileop_macro(tcp, success_type) \
   if (entering(tcp)) { \
     CDE_begin_at_fileop(tcp, __FUNCTION__); \
-  } \
-  else { \
-    CDE_end_at_fileop(tcp, __FUNCTION__, success_type); \
   }
 
 
@@ -2083,7 +2068,7 @@ sys_mkdir(struct tcb *tcp)
     CDE_begin_mkdir(tcp);
   }
   else {
-    CDE_end_mkdir(tcp);
+    CDE_end_mkdir(tcp, 0);
   }
   return 0;
 
@@ -2119,7 +2104,7 @@ sys_rmdir(struct tcb *tcp)
     CDE_begin_rmdir(tcp);
   }
   else {
-    CDE_end_rmdir(tcp);
+    CDE_end_rmdir(tcp, 0);
   }
   return 0;
 
@@ -2178,9 +2163,6 @@ sys_link(struct tcb *tcp)
   if (entering(tcp)) {
     CDE_begin_file_link(tcp);
   }
-  else {
-    CDE_end_file_link(tcp);
-  }
   return 0;
 
   /*
@@ -2200,9 +2182,6 @@ sys_linkat(struct tcb *tcp)
   // pgbovine
   if (entering(tcp)) {
     CDE_begin_file_linkat(tcp);
-  }
-  else {
-    CDE_end_file_linkat(tcp);
   }
   return 0;
 
@@ -2288,9 +2267,6 @@ sys_symlink(struct tcb *tcp)
   if (entering(tcp)) {
     CDE_begin_file_symlink(tcp);
   }
-  else {
-    CDE_end_file_symlink(tcp);
-  }
   return 0;
 
   /*
@@ -2310,9 +2286,6 @@ sys_symlinkat(struct tcb *tcp)
   // pgbovine
   if (entering(tcp)) {
     CDE_begin_file_symlinkat(tcp);
-  }
-  else {
-    CDE_end_file_symlinkat(tcp);
   }
   return 0;
 

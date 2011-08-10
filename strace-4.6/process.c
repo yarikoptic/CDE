@@ -255,7 +255,6 @@ extern void CDE_begin_execve(struct tcb* tcp);
 extern void CDE_end_execve(struct tcb* tcp);
 
 extern void CDE_init_tcb_dir_fields(struct tcb* tcp);
-extern char CDE_provenance_mode;
 
  
 static const char *
@@ -443,16 +442,14 @@ struct tcb *tcp;
 		return -1;
 	}
   // pgbovine - implement special behavior for provenance mode
+  // (actually we no longer support provenance mode)
+ 
 	/* special case: we stop tracing this process, finish line now */
 	//tprintf("%ld) ", tcp->u_arg[0]);
 	//tabto(acolumn);
 	//tprintf("= ?");
 	//printtrailer();
 
-  if (CDE_provenance_mode) {
-    extern FILE* CDE_provenance_logfile;
-    fprintf(CDE_provenance_logfile, "%d %u EXIT\n", (int)time(0), tcp->pid);
-  }
 	tcp_last = NULL; // swipe relevant code taken from printtrailer() to prevent errors
 	return 0;
 }

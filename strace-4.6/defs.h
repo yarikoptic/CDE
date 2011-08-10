@@ -410,7 +410,6 @@ struct tcb {
 
   // new fields added by pgbovine
   // handle memory management in alloc_tcb_CDE_fields() and free_tcb_CDE_fields()
-  char* opened_filename; // non-null during a call when a file has been opened
 
   // inherited from parent during fork()
   // TODO: careful with memory leaks for these strdup'ed strings!

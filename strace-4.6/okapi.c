@@ -49,6 +49,8 @@ CDE is currently licensed under GPL v3:
 
 #include "okapi.h"
 
+char OKAPI_VERBOSE = 1; // print out warning messages?
+
 
 // TODO: eliminate this hack if it results in a compile-time error
 #include "config.h" // to get I386 definition
@@ -441,7 +443,9 @@ void create_mirror_file(char* filename_abspath, char* src_prefix, char* dst_pref
   struct stat src_path_stat;
   if (lstat(src_path, &src_path_stat)) {
     // be failure-oblivious here
-    fprintf(stderr, "WARNING: cannot mirror '%s' since it does not exist\n", src_path);
+    if (OKAPI_VERBOSE) {
+      fprintf(stderr, "WARNING: cannot mirror '%s' since it does not exist\n", src_path);
+    }
     goto done;
   }
 
@@ -451,7 +455,9 @@ void create_mirror_file(char* filename_abspath, char* src_prefix, char* dst_pref
     // 'stat' will follow the symlink ...
     if (stat(src_path, &src_path_stat)) {
       // be failure-oblivious here
-      fprintf(stderr, "WARNING: the symlink '%s' has a non-existent target\n", src_path);
+      if (OKAPI_VERBOSE) {
+        fprintf(stderr, "WARNING: the symlink '%s' has a non-existent target\n", src_path);
+      }
 
       // DON'T PUNT HERE ... simply issue a warning and keep executing ...
       //goto done;
@@ -648,14 +654,18 @@ void create_mirror_symlink_and_target(char* filename_abspath, char* src_prefix, 
 
     // EEXIST means the file already exists, which isn't really a symlink failure ...
     if (symlink(relative_symlink_target, dst_symlink_path) != 0 && (errno != EEXIST)) {
-      fprintf(stderr, "WARNING: symlink('%s', '%s') failed\n", relative_symlink_target, dst_symlink_path);
+      if (OKAPI_VERBOSE) {
+        fprintf(stderr, "WARNING: symlink('%s', '%s') failed\n", relative_symlink_target, dst_symlink_path);
+      }
     }
   }
   else {
     symlink_target_abspath = format("%s/%s", dir_realpath, orig_symlink_target);
     // EEXIST means the file already exists, which isn't really a symlink failure ...
     if (symlink(orig_symlink_target, dst_symlink_path) != 0 && (errno != EEXIST)) {
-      fprintf(stderr, "WARNING: symlink('%s', '%s') failed\n", orig_symlink_target, dst_symlink_path);
+      if (OKAPI_VERBOSE) {
+        fprintf(stderr, "WARNING: symlink('%s', '%s') failed\n", orig_symlink_target, dst_symlink_path);
+      }
     }
   }
 
@@ -679,7 +689,9 @@ void create_mirror_symlink_and_target(char* filename_abspath, char* src_prefix, 
 
   struct stat symlink_target_stat;
   if (lstat(symlink_target_abspath, &symlink_target_stat)) { // lstat does NOT follow symlinks
-    fprintf(stderr, "WARNING: '%s' (symlink target) does not exist\n", symlink_target_abspath);
+    if (OKAPI_VERBOSE) {
+      fprintf(stderr, "WARNING: '%s' (symlink target) does not exist\n", symlink_target_abspath);
+    }
     goto done;
   }
 
@@ -738,8 +750,10 @@ void create_mirror_symlink_and_target(char* filename_abspath, char* src_prefix, 
       create_mirror_dirs(symlink_dst_original_path_suffix, src_prefix, dst_prefix, 0);
     }
     else {
-      fprintf(stderr, "WARNING: create_mirror_symlink_and_target('%s') has unknown target file type\n",
-              filename_abspath);
+      if (OKAPI_VERBOSE) {
+        fprintf(stderr, "WARNING: create_mirror_symlink_and_target('%s') has unknown target file type\n",
+                filename_abspath);
+      }
     }
 
     free(symlink_dst_abspath);
@@ -795,6 +809,7 @@ void copy_file(char* src_filename, char* dst_filename, int perms) {
     close(inF);
   }
   else {
+    // always print this message regardless of OKAPI_VERBOSE
     fprintf(stderr, "WARNING: cannot copy contents of '%s', creating an empty file instead\n", src_filename);
   }
 

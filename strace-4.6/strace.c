@@ -92,7 +92,6 @@ extern char *optarg;
 // pgbovine
 #include "okapi.h"
 extern char CDE_exec_mode;
-extern char CDE_provenance_mode; // -p option
 extern char CDE_verbose_mode; // -v option
 extern char CDE_exec_streaming_mode; // -s option
 extern char CDE_use_linker_from_package; // ON by default, -l option to turn OFF
@@ -102,7 +101,6 @@ extern void strcpy_redirected_cderoot(char* dst, char* src);
 extern void CDE_init_tcb_dir_fields(struct tcb* tcp);
 extern FILE* CDE_copied_files_logfile;
 extern char* CDE_PACKAGE_DIR;
-extern void CDE_init(char** argv, int optind);
 
 
 int debug = 0, followfork = 1; // pgbovine - turn on followfork by default
@@ -212,7 +210,6 @@ int exitval;
             "usage: cde [command to run and package]\n");
 
     fprintf(ofp, "\nOptions\n");
-    fprintf(ofp, "  -p  : Provenance mode (output a provenance.log file)\n");
     fprintf(ofp, "  -c  : Print the order of files copied into the package in cde-copied-files.log\n");
     fprintf(ofp, "  -o <output dir> : Set a custom output directory instead of \"cde-package/\"\n");
     fprintf(ofp, "  -v  : Verbose mode (for debugging)\n");
@@ -862,8 +859,7 @@ main(int argc, char *argv[])
   // syscalls added after Jan 1, 2011:
   //   utimes,openat,faccessat,fstatat64,fchownat,fchmodat,futimesat,mknodat
   //   linkat,symlinkat,renameat,readlinkat,mkdirat,unlinkat
-  //   exit_group (only for provenance mode)
-  char* tmp = strdup("trace=open,execve,stat,stat64,lstat,lstat64,oldstat,oldlstat,link,symlink,unlink,rename,access,creat,chmod,chown,chown32,lchown,lchown32,readlink,utime,truncate,truncate64,chdir,fchdir,mkdir,rmdir,getcwd,mknod,bind,connect,utimes,openat,faccessat,fstatat64,fchownat,fchmodat,futimesat,mknodat,linkat,symlinkat,renameat,readlinkat,mkdirat,unlinkat,exit_group");
+  char* tmp = strdup("trace=open,execve,stat,stat64,lstat,lstat64,oldstat,oldlstat,link,symlink,unlink,rename,access,creat,chmod,chown,chown32,lchown,lchown32,readlink,utime,truncate,truncate64,chdir,fchdir,mkdir,rmdir,getcwd,mknod,bind,connect,utimes,openat,faccessat,fstatat64,fchownat,fchmodat,futimesat,mknodat,linkat,symlinkat,renameat,readlinkat,mkdirat,unlinkat");
 	qualify(tmp);
   free(tmp);
 
@@ -967,9 +963,7 @@ main(int argc, char *argv[])
       break;
 		case 'p':
       // pgbovine - hijack for the '-p' option
-      CDE_provenance_mode = 1;
-      extern FILE* CDE_provenance_logfile;
-      CDE_provenance_logfile = fopen("provenance.log", "w");
+      // actually we no longer support the '-p' option (provenance mode)
 
       /*
 			if ((pid = atoi(optarg)) <= 0) {
@@ -1116,6 +1110,7 @@ main(int argc, char *argv[])
 
   // pgbovine - do all CDE initialization here after command-line options
   // have been processed (argv[optind] is the name of the target program)
+  extern void CDE_init(char** argv, int optind);
   CDE_init(argv, optind);
 
 
