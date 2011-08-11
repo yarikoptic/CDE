@@ -10,7 +10,7 @@ Note that this requires some special handling in CDE's readlink handler,
 since the version of the symlink within the package actually refers to
 the following RELATIVE path:
 
-  ../../../../../lib/libc.so.6
+  ./../../../../..//lib/libc.so.6
 
 This is because the libc.so.6 file is actually located in:
 
@@ -18,7 +18,7 @@ This is because the libc.so.6 file is actually located in:
 
 within the package, so in order to reference the version of "/lib/libc.so.6"
 WITHIN THE PACKAGE, the symlink is actually a relative link with the following
-ugly prefix: ../../../../../
+ugly prefix: ./../../../../../
 
 '''
 

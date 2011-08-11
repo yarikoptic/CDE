@@ -1046,9 +1046,6 @@ done:
 // input_buffer_arg_index is the index of the input filename argument
 // output_buffer_arg_index is the index of the argument where the output
 // buffer is being held (we clobber this in some special cases)
-//
-// TODO: we also need to un-munge symlinks to absolute paths that have been munged into
-// relative paths when they were copied into cde-root/ (e.g., "../../lib/libc.so.6")
 static void CDE_end_readlink_internal(struct tcb* tcp, int input_buffer_arg_index, int output_buffer_arg_index) {
   char* filename = strcpy_from_child(tcp, tcp->u_arg[input_buffer_arg_index]);
 
@@ -1122,6 +1119,84 @@ static void CDE_end_readlink_internal(struct tcb* tcp, int input_buffer_arg_inde
     #error "Unknown architecture (not I386 or X86_64)"
 #endif
         ptrace(PTRACE_SETREGS, tcp->pid, NULL, (long)&cur_regs);
+      }
+      else {
+        // inspect the return value (stored in readlink_target) and if
+        // it's a relative path that starts with './' and contains a '//'
+        // marker, then it MIGHT actually be a "munged" version of an
+        // absolute path symlink that was turned into a relative path
+        // when the original file was copied (okapi-ed) into the package.
+        // e.g., a symlink to an absolute path like /lib/libc.so.6 might
+        // be munged into some monstrous relative path like:
+        //
+        //   ./../../../../..//lib/libc.so.6
+        //
+        // so that it can reference the version of /lib/libc.so.6 from
+        // WITHIN THE PACKAGE rather than the native one on the target
+        // machine.  However, when the target program does a readlink(),
+        // it expects to the syscall to return '/lib/libc.so.6', so we
+        // must properly "un-munge" these sorts of symlinks.
+        //
+        // (Note that we don't have this problem with symlinks to
+        // relative paths.)
+
+        // first get the length of the return value string ...
+        struct user_regs_struct cur_regs;
+        EXITIF(ptrace(PTRACE_GETREGS, tcp->pid, NULL, (long)&cur_regs) < 0);
+#if defined (I386)
+        int ret_length = cur_regs.eax;
+#elif defined(X86_64)
+        int ret_length = cur_regs.rax;
+#else
+    #error "Unknown architecture (not I386 or X86_64)"
+#endif
+
+        char readlink_target[MAXPATHLEN];
+        if (umoven(tcp, tcp->u_arg[output_buffer_arg_index], ret_length, readlink_target) == 0) {
+          // remember to cap off the end ...
+          readlink_target[ret_length] = '\0';
+
+          // now readlink_target is the string that's "returned" by this
+          // readlink syscall
+
+          // is there a leading './' marker?
+          if (strncmp(readlink_target, "./", 2) == 0) {
+            // now check for a distinctive '//' marker, indicative of munged paths.
+            // However, this simple check can still result in false positives!!!
+            char* suffix = strstr(readlink_target, "//");
+            if (suffix) {
+              assert(suffix[0] == '/');
+              suffix++; // skip one of the slashes
+
+              assert(IS_ABSPATH(suffix));
+
+              // as a final sanity check, see if this file actually exists
+              // within cde_pseudo_root_dir, to prevent false positives
+              char* actual_path = format("%s%s", cde_pseudo_root_dir, suffix);
+              struct stat st;
+              if (lstat(actual_path, &st) == 0) {
+                // clobber the syscall's return value with 'suffix'
+                memcpy_to_child(tcp->pid, (char*)tcp->u_arg[output_buffer_arg_index],
+                                suffix, strlen(suffix) + 1);
+
+                // VERY SUBTLE - set %eax (the syscall return value) to the length
+                // of the FAKED STRING, since readlink is supposed to return the
+                // length of the returned path (some programs like Python rely
+                // on that length to allocated memory)
+#if defined (I386)
+                cur_regs.eax = (long)strlen(suffix);
+#elif defined(X86_64)
+                cur_regs.rax = (long)strlen(suffix);
+#else
+                #error "Unknown architecture (not I386 or X86_64)"
+#endif
+                ptrace(PTRACE_SETREGS, tcp->pid, NULL, (long)&cur_regs);
+              }
+              free(actual_path);
+            }
+          }
+        }
+
       }
     }
   }

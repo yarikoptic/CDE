@@ -631,17 +631,16 @@ void create_mirror_symlink_and_target(char* filename_abspath, char* src_prefix, 
     char* dir_realpath_suffix = dir_realpath + src_prefix_len;
     assert(IS_ABSPATH(dir_realpath_suffix));
 
-    struct path* p = new_path_from_abspath(dir_realpath_suffix);
     char relative_symlink_target[MAXPATHLEN];
-    if (p->depth > 0) {
-      strcpy(relative_symlink_target, "..");
-      int i;
-      for (i = 1; i < p->depth; i++) {
-        strcat(relative_symlink_target, "/..");
-      }
-    }
-    else {
-      strcpy(relative_symlink_target, "."); // simply use '.' if there are no nesting layers
+
+    // ALWAYS start with this distinctive marker, which makes this path
+    // into a relative path ...
+    strcpy(relative_symlink_target, "./");
+
+    struct path* p = new_path_from_abspath(dir_realpath_suffix);
+    int i;
+    for (i = 0; i < p->depth; i++) {
+      strcat(relative_symlink_target, "../");
     }
     delete_path(p);
 
@@ -651,6 +650,10 @@ void create_mirror_symlink_and_target(char* filename_abspath, char* src_prefix, 
     char* orig_symlink_target_suffix = orig_symlink_target + src_prefix_len;
     assert(IS_ABSPATH(orig_symlink_target_suffix));
     strcat(relative_symlink_target, orig_symlink_target_suffix);
+
+    // make sure the path starts with "./" and contains "//":
+    assert(strncmp(relative_symlink_target, "./", 2) == 0);
+    assert(strstr(relative_symlink_target, "//"));
 
     // EEXIST means the file already exists, which isn't really a symlink failure ...
     if (symlink(relative_symlink_target, dst_symlink_path) != 0 && (errno != EEXIST)) {
