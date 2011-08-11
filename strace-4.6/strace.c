@@ -859,7 +859,10 @@ main(int argc, char *argv[])
   // syscalls added after Jan 1, 2011:
   //   utimes,openat,faccessat,fstatat64,fchownat,fchmodat,futimesat,mknodat
   //   linkat,symlinkat,renameat,readlinkat,mkdirat,unlinkat
-  char* tmp = strdup("trace=open,execve,stat,stat64,lstat,lstat64,oldstat,oldlstat,link,symlink,unlink,rename,access,creat,chmod,chown,chown32,lchown,lchown32,readlink,utime,truncate,truncate64,chdir,fchdir,mkdir,rmdir,getcwd,mknod,bind,connect,utimes,openat,faccessat,fstatat64,fchownat,fchmodat,futimesat,mknodat,linkat,symlinkat,renameat,readlinkat,mkdirat,unlinkat");
+  //
+  // syscalls added after August 10, 2011 (mostly minor ones):
+  //   setxattr, lsetxattr, getxattr, lgetxattr, listxattr, llistxattr, removexattr, lremovexattr
+  char* tmp = strdup("trace=open,execve,stat,stat64,lstat,lstat64,oldstat,oldlstat,link,symlink,unlink,rename,access,creat,chmod,chown,chown32,lchown,lchown32,readlink,utime,truncate,truncate64,chdir,fchdir,mkdir,rmdir,getcwd,mknod,bind,connect,utimes,openat,faccessat,fstatat64,fchownat,fchmodat,futimesat,mknodat,linkat,symlinkat,renameat,readlinkat,mkdirat,unlinkat,setxattr,lsetxattr,getxattr,lgetxattr,listxattr,llistxattr,removexattr,lremovexattr");
 	qualify(tmp);
   free(tmp);
 

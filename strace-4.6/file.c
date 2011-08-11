@@ -1460,6 +1460,10 @@ sys_newfstatat(struct tcb *tcp)
 int
 sys_oldstat(struct tcb *tcp)
 {
+  CDE_standard_fileop_macro(tcp, 0); // pgbovine
+  return 0;
+
+  /*
 	if (entering(tcp)) {
 		printpath(tcp, tcp->u_arg[0]);
 		tprintf(", ");
@@ -1467,6 +1471,7 @@ sys_oldstat(struct tcb *tcp)
 		printoldstat(tcp, tcp->u_arg[1]);
 	}
 	return 0;
+  */
 }
 #endif /* LINUX && HAVE_STRUCT___OLD_KERNEL_STAT */
 
@@ -3121,6 +3126,11 @@ print_xattr_val(struct tcb *tcp, int failed,
 int
 sys_setxattr(struct tcb *tcp)
 {
+  // pgbovine
+  CDE_standard_fileop_macro(tcp, 0);
+  return 0;
+
+  /*
 	if (entering(tcp)) {
 		printpath(tcp, tcp->u_arg[0]);
 		tprintf(", ");
@@ -3130,6 +3140,7 @@ sys_setxattr(struct tcb *tcp)
 		printflags(xattrflags, tcp->u_arg[4], "XATTR_???");
 	}
 	return 0;
+  */
 }
 
 int
@@ -3149,6 +3160,11 @@ sys_fsetxattr(struct tcb *tcp)
 int
 sys_getxattr(struct tcb *tcp)
 {
+  // pgbovine
+  CDE_standard_fileop_macro(tcp, 0);
+  return 0;
+
+  /*
 	if (entering(tcp)) {
 		printpath(tcp, tcp->u_arg[0]);
 		tprintf(", ");
@@ -3158,6 +3174,7 @@ sys_getxattr(struct tcb *tcp)
 				tcp->u_rval);
 	}
 	return 0;
+  */
 }
 
 int
@@ -3177,13 +3194,17 @@ sys_fgetxattr(struct tcb *tcp)
 int
 sys_listxattr(struct tcb *tcp)
 {
-	if (entering(tcp)) {
-		printpath(tcp, tcp->u_arg[0]);
-	} else {
-		/* XXX Print value in format */
-		tprintf(", %p, %lu", (void *) tcp->u_arg[1], tcp->u_arg[2]);
-	}
-	return 0;
+  // pgbovine
+  CDE_standard_fileop_macro(tcp, 0);
+  return 0;
+
+//	if (entering(tcp)) {
+//		printpath(tcp, tcp->u_arg[0]);
+//	} else {
+//		/* XXX Print value in format */
+//		tprintf(", %p, %lu", (void *) tcp->u_arg[1], tcp->u_arg[2]);
+//	}
+//	return 0;
 }
 
 int
@@ -3201,12 +3222,18 @@ sys_flistxattr(struct tcb *tcp)
 int
 sys_removexattr(struct tcb *tcp)
 {
+  // pgbovine
+  CDE_standard_fileop_macro(tcp, 0);
+  return 0;
+
+  /*
 	if (entering(tcp)) {
 		printpath(tcp, tcp->u_arg[0]);
 		tprintf(", ");
 		printstr(tcp, tcp->u_arg[1], -1);
 	}
 	return 0;
+  */
 }
 
 int
