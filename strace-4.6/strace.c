@@ -712,6 +712,17 @@ startup_child (char **argv)
     // path_to_search, we still want to execute pathname, since our
     // CDE_begin_execve handler expects an original pristine pathname :)
     //printf("execv %s (path_to_search %s)\n", pathname, path_to_search);
+
+    // sanity check when running from outside of cde-root/, in order to
+    // prevent confusion ...
+    extern char cde_exec_from_outside_cderoot;
+    if (cde_exec_from_outside_cderoot) {
+      if (strstr(pathname, CDE_ROOT_NAME)) {
+        fprintf(stderr, "Fatal error: can't cde-exec '%s' from outside of cde-root/\n(instead try specifying a program path relative to cde-root/)\n", pathname);
+        exit(1);
+      }
+    }
+
 		execv(pathname, argv);
 		perror("strace: exec");
 		_exit(1);
