@@ -70,12 +70,12 @@ extern void CDE_end_unlinkat_rmdir(struct tcb* tcp);
 extern void CDE_end_getcwd(struct tcb* tcp);
 
 
-#define CDE_standard_fileop_macro(tcp, success_type) \
+#define CDE_standard_fileop_macro(tcp) \
   if (entering(tcp)) { \
     CDE_begin_standard_fileop(tcp, __FUNCTION__); \
   }
 
-#define CDE_at_fileop_macro(tcp, success_type) \
+#define CDE_at_fileop_macro(tcp) \
   if (entering(tcp)) { \
     CDE_begin_at_fileop(tcp, __FUNCTION__); \
   }
@@ -470,7 +470,7 @@ int
 sys_open(struct tcb *tcp)
 {
   // modified by pgbovine
-  CDE_standard_fileop_macro(tcp, 1); // remember success_type = 1 here
+  CDE_standard_fileop_macro(tcp);
   return 0;
 
 	//return decode_open(tcp, 0);
@@ -481,7 +481,7 @@ int
 sys_openat(struct tcb *tcp)
 {
   // modified by pgbovine
-  CDE_at_fileop_macro(tcp, 1); // remember success_type = 1 here
+  CDE_at_fileop_macro(tcp);
   return 0;
 
   /*
@@ -533,7 +533,7 @@ int
 sys_creat(struct tcb *tcp)
 {
   // modified by pgbovine
-  CDE_standard_fileop_macro(tcp, 0);
+  CDE_standard_fileop_macro(tcp);
   return 0;
 
   /*
@@ -573,7 +573,7 @@ decode_access(struct tcb *tcp, int offset)
 int
 sys_access(struct tcb *tcp)
 {
-  CDE_standard_fileop_macro(tcp, 0); // pgbovine
+  CDE_standard_fileop_macro(tcp); // pgbovine
   return 0;
 
 	//return decode_access(tcp, 0);
@@ -583,7 +583,7 @@ sys_access(struct tcb *tcp)
 int
 sys_faccessat(struct tcb *tcp)
 {
-  CDE_at_fileop_macro(tcp, 0); // pgbovine
+  CDE_at_fileop_macro(tcp); // pgbovine
   return 0;
 
   /*
@@ -721,7 +721,7 @@ sys_lseek64(struct tcb *tcp)
 int
 sys_truncate(struct tcb *tcp)
 {
-  CDE_standard_fileop_macro(tcp, 0); // pgbovine
+  CDE_standard_fileop_macro(tcp); // pgbovine
   return 0;
 
   /*
@@ -738,7 +738,7 @@ sys_truncate(struct tcb *tcp)
 int
 sys_truncate64(struct tcb *tcp)
 {
-  CDE_standard_fileop_macro(tcp, 0); // pgbovine
+  CDE_standard_fileop_macro(tcp); // pgbovine
   return 0;
 
   /*
@@ -1380,7 +1380,7 @@ printoldstat(struct tcb *tcp, long addr)
 int
 sys_stat(struct tcb *tcp)
 {
-  CDE_standard_fileop_macro(tcp, 0); // pgbovine
+  CDE_standard_fileop_macro(tcp); // pgbovine
   return 0;
 
   /*
@@ -1398,7 +1398,7 @@ sys_stat(struct tcb *tcp)
 int
 sys_stat64(struct tcb *tcp)
 {
-  CDE_standard_fileop_macro(tcp, 0); // pgbovine
+  CDE_standard_fileop_macro(tcp); // pgbovine
   return 0;
 
   /*
@@ -1429,7 +1429,7 @@ static const struct xlat fstatatflags[] = {
 int
 sys_newfstatat(struct tcb *tcp)
 {
-  CDE_at_fileop_macro(tcp, 0); // pgbovine
+  CDE_at_fileop_macro(tcp); // pgbovine
   return 0;
 
   /*
@@ -1460,7 +1460,7 @@ sys_newfstatat(struct tcb *tcp)
 int
 sys_oldstat(struct tcb *tcp)
 {
-  CDE_standard_fileop_macro(tcp, 0); // pgbovine
+  CDE_standard_fileop_macro(tcp); // pgbovine
   return 0;
 
   /*
@@ -1523,7 +1523,7 @@ sys_oldfstat(struct tcb *tcp)
 int
 sys_lstat(struct tcb *tcp)
 {
-  CDE_standard_fileop_macro(tcp, 0); // pgbovine
+  CDE_standard_fileop_macro(tcp); // pgbovine
   return 0;
 
   /*
@@ -1541,7 +1541,7 @@ sys_lstat(struct tcb *tcp)
 int
 sys_lstat64(struct tcb *tcp)
 {
-  CDE_standard_fileop_macro(tcp, 0); // pgbovine
+  CDE_standard_fileop_macro(tcp); // pgbovine
   return 0;
 
   /*
@@ -1563,7 +1563,7 @@ sys_lstat64(struct tcb *tcp)
 int
 sys_oldlstat(struct tcb *tcp)
 {
-  CDE_standard_fileop_macro(tcp, 0); // pgbovine
+  CDE_standard_fileop_macro(tcp); // pgbovine
   return 0;
 
   /*
@@ -1868,7 +1868,7 @@ printstatfs(struct tcb *tcp, long addr)
 int
 sys_statfs(struct tcb *tcp)
 {
-  CDE_standard_fileop_macro(tcp, 0); // pgbovine
+  CDE_standard_fileop_macro(tcp); // pgbovine
   return 0;
 
   /*
@@ -1928,7 +1928,7 @@ printstatfs64(struct tcb *tcp, long addr)
 int
 sys_statfs64(struct tcb *tcp)
 {
-  CDE_standard_fileop_macro(tcp, 0); // pgbovine
+  CDE_standard_fileop_macro(tcp); // pgbovine
   return 0;
 
   /*
@@ -2326,7 +2326,6 @@ int
 sys_readlink(struct tcb *tcp)
 {
   // pgbovine
-  //CDE_standard_fileop_macro(tcp, 1); // remember success_type = 1 here
   if (entering(tcp)) {
     CDE_begin_standard_fileop(tcp, __FUNCTION__);
   }
@@ -2412,7 +2411,7 @@ sys_renameat(struct tcb *tcp)
 int
 sys_chown(struct tcb *tcp)
 {
-  CDE_standard_fileop_macro(tcp, 0); // pgbovine
+  CDE_standard_fileop_macro(tcp); // pgbovine
   return 0;
 
   /*
@@ -2429,7 +2428,7 @@ sys_chown(struct tcb *tcp)
 int
 sys_fchownat(struct tcb *tcp)
 {
-  CDE_at_fileop_macro(tcp, 0); // pgbovine
+  CDE_at_fileop_macro(tcp); // pgbovine
   return 0;
 
   /*
@@ -2470,7 +2469,7 @@ decode_chmod(struct tcb *tcp, int offset)
 int
 sys_chmod(struct tcb *tcp)
 {
-  CDE_standard_fileop_macro(tcp, 0); // pgbovine
+  CDE_standard_fileop_macro(tcp); // pgbovine
   return 0;
 
 	//return decode_chmod(tcp, 0);
@@ -2480,7 +2479,7 @@ sys_chmod(struct tcb *tcp)
 int
 sys_fchmodat(struct tcb *tcp)
 {
-  CDE_at_fileop_macro(tcp, 0); // pgbovine
+  CDE_at_fileop_macro(tcp); // pgbovine
   return 0;
 
   /*
@@ -2539,7 +2538,7 @@ decode_utimes(struct tcb *tcp, int offset, int special)
 int
 sys_utimes(struct tcb *tcp)
 {
-  CDE_standard_fileop_macro(tcp, 0); // pgbovine
+  CDE_standard_fileop_macro(tcp); // pgbovine
   return 0;
 
 	//return decode_utimes(tcp, 0, 0);
@@ -2549,7 +2548,7 @@ sys_utimes(struct tcb *tcp)
 int
 sys_futimesat(struct tcb *tcp)
 {
-  CDE_at_fileop_macro(tcp, 0); // pgbovine
+  CDE_at_fileop_macro(tcp); // pgbovine
   return 0;
 
   /*
@@ -2575,7 +2574,7 @@ sys_utimensat(struct tcb *tcp)
 int
 sys_utime(struct tcb *tcp)
 {
-  CDE_standard_fileop_macro(tcp, 0); // pgbovine
+  CDE_standard_fileop_macro(tcp); // pgbovine
   return 0;
 
   /*
@@ -2643,7 +2642,7 @@ decode_mknod(struct tcb *tcp, int offset)
 int
 sys_mknod(struct tcb *tcp)
 {
-  CDE_standard_fileop_macro(tcp, 0); // pgbovine
+  CDE_standard_fileop_macro(tcp); // pgbovine
   return 0;
 
 	//return decode_mknod(tcp, 0);
@@ -2653,7 +2652,7 @@ sys_mknod(struct tcb *tcp)
 int
 sys_mknodat(struct tcb *tcp)
 {
-  CDE_at_fileop_macro(tcp, 0); // pgbovine
+  CDE_at_fileop_macro(tcp); // pgbovine
   return 0;
 
   /*
@@ -3127,7 +3126,7 @@ int
 sys_setxattr(struct tcb *tcp)
 {
   // pgbovine
-  CDE_standard_fileop_macro(tcp, 0);
+  CDE_standard_fileop_macro(tcp);
   return 0;
 
   /*
@@ -3161,7 +3160,7 @@ int
 sys_getxattr(struct tcb *tcp)
 {
   // pgbovine
-  CDE_standard_fileop_macro(tcp, 0);
+  CDE_standard_fileop_macro(tcp);
   return 0;
 
   /*
@@ -3195,7 +3194,7 @@ int
 sys_listxattr(struct tcb *tcp)
 {
   // pgbovine
-  CDE_standard_fileop_macro(tcp, 0);
+  CDE_standard_fileop_macro(tcp);
   return 0;
 
 //	if (entering(tcp)) {
@@ -3223,7 +3222,7 @@ int
 sys_removexattr(struct tcb *tcp)
 {
   // pgbovine
-  CDE_standard_fileop_macro(tcp, 0);
+  CDE_standard_fileop_macro(tcp);
   return 0;
 
   /*
