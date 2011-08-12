@@ -2580,7 +2580,6 @@ void finish_setup_shmat(struct tcb* tcp) {
     // (mask with 0xffffffff) before storing the pointer in tcp->childshm,
     // since 32-bit processes only have 32-bit addresses, not 64-bit addresses :0
     tcp->childshm = (void*)(ptrace(PTRACE_PEEKDATA, tcp->pid, tcp->savedaddr, 0) & 0xffffffff);
-    printf("tcp->childshm: %p\n", tcp->childshm);
     EXITIF(errno);
     // restore original data in child's address space
     EXITIF(ptrace(PTRACE_POKEDATA, tcp->pid, tcp->savedaddr, tcp->savedword));
