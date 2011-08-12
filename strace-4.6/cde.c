@@ -1550,23 +1550,48 @@ void CDE_begin_execve(struct tcb* tcp) {
         script_command_num_tokens++;
       }
 
-      char** new_argv = (char**)(cur_loc);
+      // We need to use raw numeric arithmetic to get the proper offsets, since
+      // we need to properly handle tracing of 32-bit target programs using a
+      // 64-bit cde-exec.  personality_wordsize[current_personality] gives the
+      // word size for the target process (e.g., 4 bytes for a 32-bit and 8 bytes
+      // for a 64-bit target process).
+      unsigned long new_argv_raw = (unsigned long)(cur_loc);
 
-      // really subtle, these addresses should be in the CHILD's address space,
-      // not the parent's
+      // really subtle, these addresses should be in the CHILD's address space, not the parent's
 
       // points to ld_linux_fullpath
-      new_argv[0] = (char*)tcp->childshm;
+      char** new_argv_0 = (char**)new_argv_raw;
+      *new_argv_0 = (char*)tcp->childshm;
+
+      if (CDE_verbose_mode) {
+        char* tmp = strcpy_from_child(tcp, (long)*new_argv_0);
+        printf("   new_argv[0]='%s'\n", tmp);
+        if (tmp) free(tmp);
+      }
 
       // points to all the tokens of script_command
       int i;
       for (i = 0; i < script_command_num_tokens; i++) {
         // ugly subtle indexing differences between modes :/
         if (CDE_use_linker_from_package) {
-          new_argv[i+1] = (char*)tcp->childshm + (script_command_token_starts[i] - base);
+          char** new_argv_i_plus_1 = (char**)(new_argv_raw + ((i+1) * personality_wordsize[current_personality]));
+          *new_argv_i_plus_1 = (char*)tcp->childshm + (script_command_token_starts[i] - base);
+
+          if (CDE_verbose_mode) {
+            char* tmp = strcpy_from_child(tcp, (long)*new_argv_i_plus_1);
+            printf("   new_argv[%d]='%s'\n", i+1, tmp);
+            if (tmp) free(tmp);
+          }
         }
         else {
-          new_argv[i] = (char*)tcp->childshm + (script_command_token_starts[i] - base);
+          char** new_argv_i = (char**)(new_argv_raw + (i * personality_wordsize[current_personality]));
+          *new_argv_i = (char*)tcp->childshm + (script_command_token_starts[i] - base);
+
+          if (CDE_verbose_mode) {
+            char* tmp = strcpy_from_child(tcp, (long)*new_argv_i);
+            printf("   new_argv[%d]='%s'\n", i, tmp);
+            if (tmp) free(tmp);
+          }
         }
       }
 
@@ -1580,37 +1605,49 @@ void CDE_begin_execve(struct tcb* tcp) {
       }
 
       // now populate the original program name from tcp->u_arg[0]
-      new_argv[first_nontoken_index] = (char*)tcp->u_arg[0];
+      char** new_argv_f = (char**)(new_argv_raw + (first_nontoken_index * personality_wordsize[current_personality]));
+      *new_argv_f = (char*)tcp->u_arg[0];
+
+      if (CDE_verbose_mode) {
+        char* tmp = strcpy_from_child(tcp, (long)*new_argv_f);
+        printf("   new_argv[%d]='%s'\n", first_nontoken_index, tmp);
+        if (tmp) free(tmp);
+      }
+
 
       // now populate argv[first_nontoken_index:] directly from child's original space
       // (original arguments)
-      char** child_argv = (char**)tcp->u_arg[1]; // in child's address space
+      unsigned long child_argv_raw = (unsigned long)tcp->u_arg[1]; // in child's address space
+
       char* cur_arg = NULL;
       i = 1; // start at argv[1]
       while (1) {
-        EXITIF(umovestr(tcp, (long)(child_argv + i), sizeof cur_arg, (void*)&cur_arg) < 0);
-        new_argv[i + first_nontoken_index] = cur_arg;
+        // read a word from child_argv_raw ...
+        EXITIF(umoven(tcp,
+                      (long)(child_argv_raw + (i * personality_wordsize[current_personality])),
+                      personality_wordsize[current_personality],
+                      (void*)&cur_arg) < 0);
+
+        // Now set new_argv_raw[i+first_nontoken_index] = cur_arg, except the tricky part is that
+        // new_argv_raw might actually be for a 32-bit target process, so if
+        // we're on a 64-bit machine, we can't just use char* pointer arithmetic.
+        // We must use raw numeric arithmetic to get the proper offsets.
+        char** new_argv_i_plus_f = (char**)(new_argv_raw + ((i+first_nontoken_index) * personality_wordsize[current_personality]));
+        *new_argv_i_plus_f = cur_arg;
+
+        // null-terminated exit condition
         if (cur_arg == NULL) {
           break;
         }
+
+        if (CDE_verbose_mode) {
+          char* tmp = strcpy_from_child(tcp, (long)cur_arg);
+          printf("   new_argv[%d]='%s'\n", i+first_nontoken_index, tmp);
+          if (tmp) free(tmp);
+        }
+
         i++;
       }
-
-      /*
-      i = 0;
-      cur_arg = NULL;
-      while (1) {
-        cur_arg = new_argv[i];
-        if (cur_arg) {
-          printf("new_argv[%d] = %s\n", i, strcpy_from_child(tcp, cur_arg));
-          i++;
-        }
-        // argv is null-terminated
-        else {
-          break;
-        }
-      }
-      */
 
       // now set ebx to the new program name and ecx to the new argv array
       // to alter the arguments of the execv system call :0
@@ -1619,15 +1656,15 @@ void CDE_begin_execve(struct tcb* tcp) {
 
 #if defined (I386)
       cur_regs.ebx = (long)tcp->childshm;            // location of base
-      cur_regs.ecx = ((long)tcp->childshm) + ((char*)new_argv - base); // location of new_argv
+      cur_regs.ecx = ((long)tcp->childshm) + ((char*)new_argv_raw - base); // location of new_argv
 #elif defined(X86_64)
       if (tcp->is_32bit_emu) {
         cur_regs.rbx = (long)tcp->childshm;
-        cur_regs.rcx = ((long)tcp->childshm) + ((char*)new_argv - base);
+        cur_regs.rcx = ((long)tcp->childshm) + ((char*)new_argv_raw - base);
       }
       else {
         cur_regs.rdi = (long)tcp->childshm;
-        cur_regs.rsi = ((long)tcp->childshm) + ((char*)new_argv - base);
+        cur_regs.rsi = ((long)tcp->childshm) + ((char*)new_argv_raw - base);
       }
 #else
   #error "Unknown architecture (not I386 or X86_64)"
@@ -1728,46 +1765,68 @@ void CDE_begin_execve(struct tcb* tcp) {
 
       int offset2 = strlen(tcp->perceived_program_fullpath) + 1;
 
-      char** new_argv = (char**)(base + offset1 + offset2);
 
-      // really subtle, these addresses should be in the CHILD's address space,
-      // not the parent's
+      // We need to use raw numeric arithmetic to get the proper offsets, since
+      // we need to properly handle tracing of 32-bit target programs using a
+      // 64-bit cde-exec.  personality_wordsize[current_personality] gives the
+      // word size for the target process (e.g., 4 bytes for a 32-bit and 8 bytes
+      // for a 64-bit target process).
+      unsigned long new_argv_raw = (unsigned long)(base + offset1 + offset2);
+
+      // really subtle, these addresses should be in the CHILD's address space, not the parent's:
 
       // points to ld_linux_fullpath
-      new_argv[0] = (char*)tcp->childshm;
+      char** new_argv_0 = (char**)new_argv_raw;
+      *new_argv_0 = (char*)tcp->childshm;
+
+      if (CDE_verbose_mode) {
+        char* tmp = strcpy_from_child(tcp, (long)*new_argv_0);
+        printf("   new_argv[0]='%s'\n", tmp);
+        if (tmp) free(tmp);
+      }
+
+      char** new_argv_1 = (char**)(new_argv_raw + personality_wordsize[current_personality]);
       // points to the full path to the target program (real_program_path_base)
-      new_argv[1] = (char*)tcp->childshm + offset1;
+      *new_argv_1 = (char*)tcp->childshm + offset1;
 
-      // now populate argv[1:] directly from child's original space
-      // (original arguments)
+      if (CDE_verbose_mode) {
+        char* tmp = strcpy_from_child(tcp, (long)*new_argv_1);
+        printf("   new_argv[1]='%s'\n", tmp);
+        if (tmp) free(tmp);
+      }
 
-      char** child_argv = (char**)tcp->u_arg[1]; // in child's address space
+      // now populate argv[1:] directly from child's original space (the original arguments)
+      unsigned long child_argv_raw = (unsigned long)tcp->u_arg[1]; // in child's address space
       char* cur_arg = NULL;
       int i = 1; // start at argv[1], since we're ignoring argv[0]
+
       while (1) {
-        EXITIF(umovestr(tcp, (long)(child_argv + i), sizeof cur_arg, (void*)&cur_arg) < 0);
-        new_argv[i + 1] = cur_arg;
+        // read a word from child_argv_raw ...
+        EXITIF(umoven(tcp,
+                      (long)(child_argv_raw + (i * personality_wordsize[current_personality])),
+                      personality_wordsize[current_personality],
+                      (void*)&cur_arg) < 0);
+
+        // Now set new_argv_raw[i+1] = cur_arg, except the tricky part is that
+        // new_argv_raw might actually be for a 32-bit target process, so if
+        // we're on a 64-bit machine, we can't just use char* pointer arithmetic.
+        // We must use raw numeric arithmetic to get the proper offsets.
+        char** new_argv_i_plus_1 = (char**)(new_argv_raw + ((i+1) * personality_wordsize[current_personality]));
+        *new_argv_i_plus_1 = cur_arg;
+
+        // null-terminated exit condition
         if (cur_arg == NULL) {
           break;
         }
+
+        if (CDE_verbose_mode) {
+          char* tmp = strcpy_from_child(tcp, (long)cur_arg);
+          printf("   new_argv[%d]='%s'\n", i+i, tmp);
+          if (tmp) free(tmp);
+        }
+
         i++;
       }
-
-      /*
-      i = 0;
-      cur_arg = NULL;
-      while (1) {
-        cur_arg = new_argv[i];
-        if (cur_arg) {
-          printf("new_argv[%d] = %s\n", i, strcpy_from_child(tcp, cur_arg));
-          i++;
-        }
-        // argv is null-terminated
-        else {
-          break;
-        }
-      }
-      */
 
 
       if (CDE_use_linker_from_package) {
@@ -2503,7 +2562,7 @@ void finish_setup_shmat(struct tcb* tcp) {
   // TODO: is the use of 2 specific to 32-bit machines?
   tcp->saved_regs.eip = tcp->saved_regs.eip - 2;
 #elif defined(X86_64)
-  if( tcp->is_32bit_emu) {
+  if (tcp->is_32bit_emu) {
     // If we're on a 64-bit machine but tracing a 32-bit target process, then we
     // need to handle the return value of the 32-bit __NR_ipc SHMAT syscall as
     // though we're on a 32-bit machine (see code above).  This was VERY SUBTLE
