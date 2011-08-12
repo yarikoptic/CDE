@@ -2575,7 +2575,12 @@ void finish_setup_shmat(struct tcb* tcp) {
     // the pointer to the shared memory segment allocated by shmat() is actually
     // located in *tcp->savedaddr (in the child's address space)
     errno = 0;
-    tcp->childshm = (void*)ptrace(PTRACE_PEEKDATA, tcp->pid, tcp->savedaddr, 0);
+
+    // this is SUPER IMPORTANT ... only keep the 32 least significant bits
+    // (mask with 0xffffffff) before storing the pointer in tcp->childshm,
+    // since 32-bit processes only have 32-bit addresses, not 64-bit addresses :0
+    tcp->childshm = (void*)(ptrace(PTRACE_PEEKDATA, tcp->pid, tcp->savedaddr, 0) & 0xffffffff);
+    printf("tcp->childshm: %p\n", tcp->childshm);
     EXITIF(errno);
     // restore original data in child's address space
     EXITIF(ptrace(PTRACE_POKEDATA, tcp->pid, tcp->savedaddr, tcp->savedword));
