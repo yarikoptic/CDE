@@ -1821,7 +1821,7 @@ void CDE_begin_execve(struct tcb* tcp) {
 
         if (CDE_verbose_mode) {
           char* tmp = strcpy_from_child(tcp, (long)cur_arg);
-          printf("   new_argv[%d]='%s'\n", i+i, tmp);
+          printf("   new_argv[%d]='%s'\n", i+1, tmp);
           if (tmp) free(tmp);
         }
 
