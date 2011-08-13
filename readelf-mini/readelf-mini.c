@@ -11776,6 +11776,39 @@ done:
 }
 
 
+// pgbovine - find whether this is a 32-bit or 64-bit ELF binary,
+// and returns either 32 or 64 to the caller.  Returns -1 on error.
+int find_ELF_class(char * file_name) {
+  FILE* file = fopen(file_name, "rb");
+  assert(file);
+
+  if (! get_file_header (file)) {
+    error (_("%s: Failed to read file header\n"), file_name);
+    fclose(file);
+    return -1;
+  }
+
+  fclose(file);
+
+  if (   elf_header.e_ident[EI_MAG0] != ELFMAG0
+      || elf_header.e_ident[EI_MAG1] != ELFMAG1
+      || elf_header.e_ident[EI_MAG2] != ELFMAG2
+      || elf_header.e_ident[EI_MAG3] != ELFMAG3) {
+    error(_("Not an ELF file - it has the wrong magic bytes at the start\n"));
+    return -1;
+  }
+  if (elf_header.e_ident[EI_CLASS] == ELFCLASS32) {
+    return 32;
+  }
+  else if (elf_header.e_ident[EI_CLASS] == ELFCLASS64) {
+    return 64;
+  }
+  else {
+    return -1;
+  }
+}
+
+
 // comment-out main so that we can make this into a library
 /*
 int
@@ -11810,4 +11843,3 @@ main (int argc, char ** argv)
   return 0;
 }
 */
-
