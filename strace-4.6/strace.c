@@ -94,6 +94,7 @@ extern char *optarg;
 extern char CDE_exec_mode;
 extern char CDE_verbose_mode; // -v option
 extern char CDE_exec_streaming_mode; // -s option
+extern char CDE_block_net_access; // -n option
 extern char CDE_use_linker_from_package; // ON by default, -l option to turn OFF
 extern void alloc_tcb_CDE_fields(struct tcb* tcp);
 extern void free_tcb_CDE_fields(struct tcb* tcp);
@@ -199,6 +200,7 @@ int exitval;
 
     fprintf(ofp, "\nOptions\n");
     fprintf(ofp, "  -l  : Use native dynamic linker on machine (less portable but more robust)\n");
+    fprintf(ofp, "  -n  : Block network access (blank out bind/connect syscalls)\n");
     fprintf(ofp, "  -s  : Streaming mode (ooh, mysterious!)\n");
     fprintf(ofp, "  -v  : Verbose mode (for debugging)\n");
   }
@@ -881,7 +883,7 @@ main(int argc, char *argv[])
 	qualify("verbose=all");
 	qualify("signal=all");
 	while ((c = getopt(argc, argv,
-		"+cCdfFhqrtTvVxzpls"
+		"+cCdfFhqrtTvVxzplsn"
 #ifndef USE_PROCFS
 		"D"
 #endif
@@ -938,6 +940,10 @@ main(int argc, char *argv[])
 			break;
 		case 't':
 			tflag++;
+			break;
+		case 'n':
+      // pgbovine - hijack for '-n' option
+      CDE_block_net_access = 1;
 			break;
 		case 'T':
 			dtime++;

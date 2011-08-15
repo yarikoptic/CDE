@@ -69,6 +69,8 @@ char CDE_verbose_mode = 0; // -v option
 char* CDE_PACKAGE_DIR = NULL;
 char* CDE_ROOT_DIR = NULL;
 
+char CDE_block_net_access = 0; // -n option
+
 
 // only relevant if CDE_exec_mode = 1
 char CDE_exec_streaming_mode = 0; // -s option
@@ -3730,6 +3732,18 @@ void CDE_begin_socket_bind_or_connect(struct tcb *tcp) {
 
         free(original_path);
       }
+    }
+  }
+  else {
+    if (CDE_block_net_access) {
+      // blank out the sockaddr argument if you want to block network access
+      //
+      // I think that blocking 'bind' prevents setting up sockets to accept
+      // incoming connections, and blocking 'connect' prevents outgoing
+      // connections.
+      struct sockaddr s;
+      memset(&s, 0, sizeof(s));
+      memcpy_to_child(tcp->pid, (char*)addr, (char*)&s, sizeof(s));
     }
   }
 }
