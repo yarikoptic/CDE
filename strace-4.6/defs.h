@@ -439,8 +439,6 @@ struct tcb {
   void* savedaddr;     // only relevant when forcing 32-bit target processes to do shmat()
   char setting_up_shm; // 1 if we're in the process of setting up shared memory
 
-  char is_32bit_emu;   // 1 iff the target process is a 32-bit process running on a 64-bit host
-
   struct PI* p_ignores; // point to an element within process_ignores if
                         // this traced process has custom ignore options
 };

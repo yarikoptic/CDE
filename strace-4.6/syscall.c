@@ -913,7 +913,7 @@ get_scno(struct tcb *tcp)
 		if (upeek(tcp, 8*CS, &val) < 0)
 			return -1;
 		switch (val) {
-			case 0x23: currpers = 1; tcp->is_32bit_emu = 1; /* pgbovine */ break;
+			case 0x23: currpers = 1; break;
 			case 0x33: currpers = 0; break;
 			default:
 				fprintf(stderr, "Unknown value CS=0x%02X while "

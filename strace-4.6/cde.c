@@ -76,6 +76,12 @@ char CDE_block_net_access = 0; // -n option
 char CDE_exec_streaming_mode = 0; // -s option
 
 
+#if defined(X86_64)
+// current_personality == 1 means that a 64-bit cde-exec is actually tracking a
+// 32-bit target process at the moment:
+#define IS_32BIT_EMU (current_personality == 1)
+#endif
+
 // Super-simple trie implementation for doing fast string matching:
 // adapted from my earlier IncPy project
 
@@ -561,7 +567,7 @@ static void modify_syscall_single_arg(struct tcb* tcp, int arg_num, char* filena
 #if defined (I386)
     cur_regs.ebx = (long)tcp->childshm;
 #elif defined(X86_64)
-    if (tcp->is_32bit_emu) {
+    if (IS_32BIT_EMU) {
       cur_regs.rbx = (long)tcp->childshm;
     }
     else {
@@ -576,7 +582,7 @@ static void modify_syscall_single_arg(struct tcb* tcp, int arg_num, char* filena
 #if defined (I386)
     cur_regs.ecx = (long)tcp->childshm;
 #elif defined(X86_64)
-    if (tcp->is_32bit_emu) {
+    if (IS_32BIT_EMU) {
       cur_regs.rcx = (long)tcp->childshm;
     }
     else {
@@ -627,7 +633,7 @@ static void modify_syscall_two_args(struct tcb* tcp) {
     cur_regs.ebx = (long)tcp->childshm;
     cur_regs.ecx = (long)(((char*)tcp->childshm) + len1 + 1);
 #elif defined(X86_64)
-    if (tcp->is_32bit_emu) {
+    if (IS_32BIT_EMU) {
       cur_regs.rbx = (long)tcp->childshm;
       cur_regs.rcx = (long)(((char*)tcp->childshm) + len1 + 1);
     }
@@ -656,7 +662,7 @@ static void modify_syscall_two_args(struct tcb* tcp) {
 #if defined (I386)
     cur_regs.ebx = (long)tcp->childshm; // only set EBX
 #elif defined(X86_64)
-    if (tcp->is_32bit_emu) {
+    if (IS_32BIT_EMU) {
       cur_regs.rbx = (long)tcp->childshm;
     }
     else {
@@ -677,7 +683,7 @@ static void modify_syscall_two_args(struct tcb* tcp) {
 #if defined (I386)
     cur_regs.ecx = (long)tcp->childshm; // only set ECX
 #elif defined(X86_64)
-    if (tcp->is_32bit_emu) {
+    if (IS_32BIT_EMU) {
       cur_regs.rcx = (long)tcp->childshm;
     }
     else {
@@ -729,7 +735,7 @@ static void modify_syscall_second_and_fourth_args(struct tcb* tcp) {
     cur_regs.ecx = (long)tcp->childshm;
     cur_regs.esi = (long)(((char*)tcp->childshm) + len1 + 1);
 #elif defined(X86_64)
-    if (tcp->is_32bit_emu) {
+    if (IS_32BIT_EMU) {
       cur_regs.rcx = (long)tcp->childshm;
       cur_regs.rsi = (long)(((char*)tcp->childshm) + len1 + 1);
     }
@@ -752,7 +758,7 @@ static void modify_syscall_second_and_fourth_args(struct tcb* tcp) {
 #if defined (I386)
     cur_regs.ecx = (long)tcp->childshm;
 #elif defined(X86_64)
-    if (tcp->is_32bit_emu) {
+    if (IS_32BIT_EMU) {
       cur_regs.rcx = (long)tcp->childshm;
     }
     else {
@@ -773,7 +779,7 @@ static void modify_syscall_second_and_fourth_args(struct tcb* tcp) {
 #if defined (I386)
     cur_regs.esi = (long)tcp->childshm; // only set ECX
 #elif defined(X86_64)
-    if (tcp->is_32bit_emu) {
+    if (IS_32BIT_EMU) {
       cur_regs.rsi = (long)tcp->childshm;
     }
     else {
@@ -825,7 +831,7 @@ static void modify_syscall_first_and_third_args(struct tcb* tcp) {
     cur_regs.ebx = (long)tcp->childshm;
     cur_regs.edx = (long)(((char*)tcp->childshm) + len1 + 1);
 #elif defined(X86_64)
-    if (tcp->is_32bit_emu) {
+    if (IS_32BIT_EMU) {
       cur_regs.rbx = (long)tcp->childshm;
       cur_regs.rdx = (long)(((char*)tcp->childshm) + len1 + 1);
     }
@@ -848,7 +854,7 @@ static void modify_syscall_first_and_third_args(struct tcb* tcp) {
 #if defined (I386)
     cur_regs.ebx = (long)tcp->childshm;
 #elif defined(X86_64)
-    if (tcp->is_32bit_emu) {
+    if (IS_32BIT_EMU) {
       cur_regs.rbx = (long)tcp->childshm;
     }
     else {
@@ -869,7 +875,7 @@ static void modify_syscall_first_and_third_args(struct tcb* tcp) {
 #if defined (I386)
     cur_regs.edx = (long)tcp->childshm; // only set ECX
 #elif defined(X86_64)
-    if (tcp->is_32bit_emu) {
+    if (IS_32BIT_EMU) {
       cur_regs.rdx = (long)tcp->childshm;
     }
     else {
@@ -1660,7 +1666,7 @@ void CDE_begin_execve(struct tcb* tcp) {
       cur_regs.ebx = (long)tcp->childshm;            // location of base
       cur_regs.ecx = ((long)tcp->childshm) + ((char*)new_argv_raw - base); // location of new_argv
 #elif defined(X86_64)
-      if (tcp->is_32bit_emu) {
+      if (IS_32BIT_EMU) {
         cur_regs.rbx = (long)tcp->childshm;
         cur_regs.rcx = ((long)tcp->childshm) + ((char*)new_argv_raw - base);
       }
@@ -1841,7 +1847,7 @@ void CDE_begin_execve(struct tcb* tcp) {
         cur_regs.ebx = (long)tcp->childshm;            // location of base
         cur_regs.ecx = ((long)tcp->childshm) + offset1 + offset2; // location of new_argv
 #elif defined(X86_64)
-        if (tcp->is_32bit_emu) {
+        if (IS_32BIT_EMU) {
           cur_regs.rbx = (long)tcp->childshm;
           cur_regs.rcx = ((long)tcp->childshm) + offset1 + offset2;
         }
@@ -2412,8 +2418,6 @@ void alloc_tcb_CDE_fields(struct tcb* tcp) {
   tcp->childshm = NULL;
   tcp->setting_up_shm = 0;
 
-  tcp->is_32bit_emu = 0;
-
   if (CDE_exec_mode) {
     key_t key;
     // randomly probe for a valid shm key
@@ -2450,7 +2454,6 @@ void free_tcb_CDE_fields(struct tcb* tcp) {
   tcp->localshm = NULL;
   tcp->childshm = NULL;
   tcp->setting_up_shm = 0;
-  tcp->is_32bit_emu = 0;
   tcp->p_ignores = NULL;
 
   if (tcp->current_dir) {
@@ -2503,7 +2506,7 @@ static void begin_setup_shmat(struct tcb* tcp) {
   cur_regs.edi = (long)NULL; /* We don't use shmat's shmaddr */
   cur_regs.ebp = 0; /* The "fifth" argument is unused. */
 #elif defined(X86_64)
-  if( tcp->is_32bit_emu) {
+  if (IS_32BIT_EMU) {
     // If we're on a 64-bit machine but tracing a 32-bit target process, then we
     // need to make the 32-bit __NR_ipc SHMAT syscall as though we're on a 32-bit
     // machine (see code above), except that we use registers like 'rbx' rather
@@ -2564,7 +2567,7 @@ void finish_setup_shmat(struct tcb* tcp) {
   // TODO: is the use of 2 specific to 32-bit machines?
   tcp->saved_regs.eip = tcp->saved_regs.eip - 2;
 #elif defined(X86_64)
-  if (tcp->is_32bit_emu) {
+  if (IS_32BIT_EMU) {
     // If we're on a 64-bit machine but tracing a 32-bit target process, then we
     // need to handle the return value of the 32-bit __NR_ipc SHMAT syscall as
     // though we're on a 32-bit machine (see code above).  This was VERY SUBTLE
