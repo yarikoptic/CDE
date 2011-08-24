@@ -2381,7 +2381,7 @@ static void* find_free_addr(int pid, int prot, unsigned long size) {
     unsigned long cstart, cend;
     int major, minor;
 
-    sscanf(s, "%lx-%lx %c%c%c%c %*x %d:%d", &cstart, &cend, &r, &w, &x, &p, &major, &minor);
+    sscanf(s, "%lx-%lx %c%c%c%c %*x %x:%x", &cstart, &cend, &r, &w, &x, &p, &major, &minor);
 
     if (cend - cstart < size) {
       continue;
