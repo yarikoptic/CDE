@@ -104,7 +104,7 @@ extern FILE* CDE_copied_files_logfile;
 extern char* CDE_PACKAGE_DIR;
 
 
-int debug = 0, followfork = 1; // pgbovine - turn on followfork by default
+int debug = 0, followfork = 1; // pgbovine - turn on followfork by default, can de-activate using the '-f' option
 unsigned int ptrace_setoptions = 0;
 int dtime = 0, xflag = 0, qflag = 1; // pgbovine - turn on quiet mode (-q) by
                                      // default to shut up terminal line noise
@@ -201,6 +201,7 @@ int exitval;
     fprintf(ofp, "\nOptions\n");
     fprintf(ofp, "  -l  : Use native dynamic linker on machine (less portable but more robust)\n");
     fprintf(ofp, "  -n  : Block network access (blank out bind/connect syscalls)\n");
+    fprintf(ofp, "  -f  : Do NOT follow forks, so child processes run natively\n");
     fprintf(ofp, "  -s  : Streaming mode (ooh, mysterious!)\n");
     fprintf(ofp, "  -v  : Verbose mode (for debugging)\n");
   }
@@ -214,6 +215,7 @@ int exitval;
     fprintf(ofp, "\nOptions\n");
     fprintf(ofp, "  -c  : Print the order of files copied into the package in cde-copied-files.log\n");
     fprintf(ofp, "  -o <output dir> : Set a custom output directory instead of \"cde-package/\"\n");
+    fprintf(ofp, "  -f  : Do NOT follow forks, so child processes are not packaged\n");
     fprintf(ofp, "  -v  : Verbose mode (for debugging)\n");
   }
 
@@ -923,7 +925,9 @@ main(int argc, char *argv[])
 			optF = 1;
 			break;
 		case 'f':
-			followfork++;
+                        // pgbovine - hijack for -f option meaning to NOT follow forks
+                        // (might be confusing since strace uses -f to mean DO follow forks)
+			followfork = 0;
 			break;
 		case 'h':
 			usage(stdout, 0);
