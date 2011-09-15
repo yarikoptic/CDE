@@ -102,6 +102,9 @@ extern void strcpy_redirected_cderoot(char* dst, char* src);
 extern void CDE_init_tcb_dir_fields(struct tcb* tcp);
 extern FILE* CDE_copied_files_logfile;
 extern char* CDE_PACKAGE_DIR;
+extern void CDE_clear_options_arrays();
+extern void CDE_add_ignore_exact_path(char* p);
+extern void CDE_add_ignore_prefix_path(char* p);
 
 
 int debug = 0, followfork = 1; // pgbovine - turn on followfork by default, can de-activate using the '-f' option
@@ -203,6 +206,8 @@ int exitval;
     fprintf(ofp, "  -n  : Block network access (blank out bind/connect syscalls)\n");
     fprintf(ofp, "  -f  : Do NOT follow forks, so child processes run natively\n");
     fprintf(ofp, "  -s  : Streaming mode (ooh, mysterious!)\n");
+    fprintf(ofp, "  -i '<file path>' : Ignore the given exact file path\n");
+    fprintf(ofp, "  -p '<file path>' : Ignore the given file path prefix\n");
     fprintf(ofp, "  -v  : Verbose mode (for debugging)\n");
   }
   else {
@@ -216,6 +221,8 @@ int exitval;
     fprintf(ofp, "  -c  : Print the order of files copied into the package in cde-copied-files.log\n");
     fprintf(ofp, "  -o <output dir> : Set a custom output directory instead of \"cde-package/\"\n");
     fprintf(ofp, "  -f  : Do NOT follow forks, so child processes are not packaged\n");
+    fprintf(ofp, "  -i '<file path>' : Ignore the given exact file path\n");
+    fprintf(ofp, "  -p '<file path>' : Ignore the given file path prefix\n");
     fprintf(ofp, "  -v  : Verbose mode (for debugging)\n");
   }
 
@@ -842,6 +849,8 @@ main(int argc, char *argv[])
   }
 	progname = argv[0];
 
+  CDE_clear_options_arrays(); // pgbovine - call this as EARLY as possible so that '-i' and '-p' options work!
+
   // pgbovine - if program name is 'cde-exec', then activate CDE_exec_mode
   CDE_exec_mode = (strcmp(basename(progname), "cde-exec") == 0);
 
@@ -885,11 +894,11 @@ main(int argc, char *argv[])
 	qualify("verbose=all");
 	qualify("signal=all");
 	while ((c = getopt(argc, argv,
-		"+cCdfFhqrtTvVxzplsn"
+		"+cCdfFhqrtTvVxzlsn"
 #ifndef USE_PROCFS
 		"D"
 #endif
-		"a:e:o:O:S:u:E:i:")) != EOF) {
+		"a:e:o:O:S:u:E:i:p:")) != EOF) {
 		switch (c) {
 		case 'c':
       // pgbovine - hijack for -c option
@@ -933,7 +942,10 @@ main(int argc, char *argv[])
 			usage(stdout, 0);
 			break;
 		case 'i':
-			iflag++;
+                        // pgbovine - hijack for the '-i' option
+                        // for specifying an ignore_exact path on the command line
+                        CDE_add_ignore_exact_path(strdup(optarg));
+			//iflag++;
 			break;
 		case 'q':
 			qflag++;
@@ -988,6 +1000,10 @@ main(int argc, char *argv[])
 		case 'p':
       // pgbovine - hijack for the '-p' option
       // actually we no longer support the '-p' option (provenance mode)
+
+      // instead, the new '-p' option is to manually specify an ignore_prefix
+      // on the command line
+      CDE_add_ignore_prefix_path(strdup(optarg));
 
       /*
 			if ((pid = atoi(optarg)) <= 0) {

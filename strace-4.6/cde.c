@@ -3256,8 +3256,10 @@ static void _add_to_array_internal(char** my_array, int* p_len, char* p, char* a
   assert(my_array[*p_len] == NULL);
   my_array[*p_len] = strdup(p);
 
-  // debug printf
-  //fprintf(stderr, "%s[%d] = '%s'\n", array_name, *p_len, my_array[*p_len]);
+
+  if (CDE_verbose_mode) {
+    printf("%s[%d] = '%s'\n", array_name, *p_len, my_array[*p_len]);
+  }
 
   (*p_len)++;
 
@@ -3296,22 +3298,9 @@ void CDE_add_ignore_envvar(char* p) {
 }
 
 
-// initialize arrays based on the cde.options file, which has the grammar:
-//
-// ignore_exact=<exact path to ignore>
-// ignore_prefix=<path prefix to ignore>
-// ignore_substr=<path substring to ignore>
-// redirect_exact=<exact path to allow>
-// redirect_prefix=<path prefix to allow>
-// redirect_substr=<path substring to allow>
-// ignore_environment_var=<environment variable to ignore>
-//
-// On 2011-06-22, added support for process-specific ignores, with the following syntax:
-// ignore_process=<exact path to ignore>
-// {
-//   process_ignore_prefix=<path prefix to ignore for the given process>
-// }
-static void CDE_init_options() {
+// call this at the VERY BEGINNING of execution, so that ignore paths can be
+// specified on the command line (e.g., using the '-i' and '-p' options)
+void CDE_clear_options_arrays() {
   memset(ignore_exact_paths,    0, sizeof(ignore_exact_paths));
   memset(ignore_prefix_paths,   0, sizeof(ignore_prefix_paths));
   memset(ignore_substr_paths,   0, sizeof(ignore_substr_paths));
@@ -3330,6 +3319,26 @@ static void CDE_init_options() {
   redirect_substr_paths_ind = 0;
   ignore_envvars_ind = 0;
   process_ignores_ind = 0;
+}
+
+
+// initialize arrays based on the cde.options file, which has the grammar:
+//
+// ignore_exact=<exact path to ignore>
+// ignore_prefix=<path prefix to ignore>
+// ignore_substr=<path substring to ignore>
+// redirect_exact=<exact path to allow>
+// redirect_prefix=<path prefix to allow>
+// redirect_substr=<path substring to allow>
+// ignore_environment_var=<environment variable to ignore>
+//
+// On 2011-06-22, added support for process-specific ignores, with the following syntax:
+// ignore_process=<exact path to ignore>
+// {
+//   process_ignore_prefix=<path prefix to ignore for the given process>
+// }
+static void CDE_init_options() {
+  // Pre-req: CDE_clear_options_arrays() has already been called!
 
   char in_braces = false;
 
