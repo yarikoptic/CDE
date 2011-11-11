@@ -9,6 +9,47 @@
 #
 # by Philip Guo
 
+'''
+A brief attempt to explain how okapi_dir.py should be used:
+
+argv[1] should be an ABSOLUTE PATH to a directory on your system
+argv[2] can be an absolute or relative path to a directory
+
+okapi_dir.py copies the entire directory tree in argv[1] into argv[2],
+preserving all sub-directory and symlink structure.
+
+For example, let's say you run:
+
+  mkdir /tmp/A/
+
+Then populate /tmp/A/ with some contents so that it looks like this:
+
+  /tmp/A
+  /tmp/A/A-subdir
+  /tmp/A/A-subdir/one.txt
+  /tmp/A/A-subdir/two.txt
+  /tmp/A/A-subdir/A-subsubdir
+  /tmp/A/A-subdir/A-subsubdir/three.txt
+
+Now you run:
+
+  mkdir B/
+
+In order to copy the entirety of /tmp/A into B/, you run:
+
+  python CDE/scripts/okapi_dir.py /tmp/A/ B/
+
+and now the contents of B will look like:
+
+  B/tmp/A
+  B/tmp/A/A-subdir
+  B/tmp/A/A-subdir/one.txt
+  B/tmp/A/A-subdir/two.txt
+  B/tmp/A/A-subdir/A-subsubdir
+  B/tmp/A/A-subdir/A-subsubdir/three.txt
+
+'''
+
 import os, sys, subprocess
 
 def run_cmd_print_stderr(args):
