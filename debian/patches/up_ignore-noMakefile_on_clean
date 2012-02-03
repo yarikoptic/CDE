@@ -1,0 +1,11 @@
+--- a/Makefile
++++ b/Makefile
+@@ -16,7 +16,7 @@ strace-4.6/Makefile:
+ 
+ clean:
+ 	cd readelf-mini && make clean
+-	cd strace-4.6 && make clean
++	-cd strace-4.6 && make clean
+ 	rm -f cde cde-exec okapi
+ 
+ okapi: strace-4.6/okapi.c strace-4.6/okapi.h
