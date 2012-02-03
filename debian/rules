@@ -9,5 +9,15 @@
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
+srcpkg = $(shell LC_ALL=C dpkg-parsechangelog | awk '/^Source:/{print $$2;}')
+uversion = $(shell LC_ALL=C dpkg-parsechangelog | awk '/^Version:/{print $$2;}' | sed -e 's,-[^-]*$$,,g')
+
 %:
-	dh $@ 
+	dh $@
+
+# make orig tarball from repository corresponding to $srcpkg (should
+# contain treeish) but excluding some content
+get-orig-source:
+	git archive --worktree-attributes --format=tar \
+		--prefix=$(srcpkg)-$(uversion)/ $(uversion) \
+        | gzip -9 >| ../tarballs/$(srcpkg)_$(uversion).orig.tar.gz
