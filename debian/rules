@@ -9,7 +9,7 @@ uversion = $(shell LC_ALL=C dpkg-parsechangelog | awk '/^Version:/{print $$2;}' 
 %:
 	dh $@
 
-override-dh-auto-install:
+override_dh_auto_install:
 	make install DESTDIR=debian/cde PREFIX=/usr
 
 # make orig tarball from repository corresponding to $srcpkg (should
