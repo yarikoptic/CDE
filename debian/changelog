@@ -1,5 +1,5 @@
 cde (0.0.0-20111111-gadcda94-1~pre1) unstable; urgency=low
 
-  * Initial release (Closes: #nnnn)  <nnnn is the bug number of your ITP>
+  * Initial release (Closes: #610711)
 
- -- Yaroslav Halchenko <debian@onerussian.com>  Thu, 02 Feb 2012 08:58:17 -0500
+ -- Yaroslav Halchenko <debian@onerussian.com>  Fri, 03 Feb 2012 19:27:05 -0500

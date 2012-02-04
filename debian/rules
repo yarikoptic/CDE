@@ -15,6 +15,9 @@ uversion = $(shell LC_ALL=C dpkg-parsechangelog | awk '/^Version:/{print $$2;}' 
 %:
 	dh $@
 
+override-dh-auto-install:
+	make install DESTDIR=debian/cde PREFIX=/usr
+
 # make orig tarball from repository corresponding to $srcpkg (should
 # contain treeish) but excluding some content
 get-orig-source:

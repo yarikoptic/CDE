@@ -1,0 +1,14 @@
+* manpages
+
+  Ask Philip to
+  - add handling of --help and --version
+
+  - assure ok appearance processed with help2man (or just
+    generate/maintain them)
+
+  So far tried with
+
+   help2man --no-info --help-option=-h ./cde --version-string=VERSION
+
+* What is optimal way to run unit tests and what would be the
+   build-depends to assure all necessary components for them

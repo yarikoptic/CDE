@@ -1,0 +1,11 @@
+--- a/Makefile
++++ b/Makefile
+@@ -9,7 +9,7 @@ all: strace-4.6/Makefile okapi
+ 	mv -f strace-4.6/cde-exec .
+ 
+ install: all
+-	install cde cde-exec $(PREFIX)/bin
++	install cde cde-exec $(DESTDIR)/$(PREFIX)/bin
+ 
+ strace-4.6/Makefile:
+ 	cd strace-4.6 && ./configure
