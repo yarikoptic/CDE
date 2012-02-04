@@ -1,10 +1,29 @@
 Format: http://dep.debian.net/deps/dep5
 Upstream-Name: cde
-Source: <url://example.com>
+Source: http://github.com/pgbovine/CDE
+Comment:
+ CDE project is heavily based on strace and readelf-mini borrowed from
+ GNU binutils.  CDE is developed ATM as a fork of strace.
 
 Files: *
-Copyright: <years> <put author's name and email here>
-           <years> <likewise for another author>
+Copyright: 2010-2011 Philip Guo <pg@cs.stanford.edu>
+License: GPL-3.0+
+
+Files: strace-*
+Copyright:
+ 1991, 1992 Paul Kranenburg <pk@cs.few.eur.nl>
+ 1993 Branko Lankester <branko@hacktic.nl>
+ 1993 Ulrich Pegelow <pegelow@moorea.uni-muenster.de>
+ 1995, 1996 Michael Elizabeth Chastain <mec@duracef.shout.net>
+ 1993, 1994, 1995, 1996 Rick Sladkey <jrs@world.std.com>
+ 1998-2003 Wichert Akkerman <wakkerma@deephackmode.org>
+ 2002-2008 Roland McGrath  <roland@redhat.com>
+ 2003-2008 Dmitry V. Levin <ldv@altlinux.org>
+ 2007-2008 Jan Kratochvil  <jan.kratochvil@redhat.com>
+License: BSD-3
+
+Files: readelf-mini
+Copyright: 1998-2009  Free Software Foundation, Inc.
 License: GPL-3.0+
 
 Files: debian/*
@@ -28,5 +47,25 @@ License: GPL-3.0+
  On Debian systems, the complete text of the GNU General
  Public License version 3 can be found in "/usr/share/common-licenses/GPL-3".
 
-# Please also look if there are files or directories which have a
-# different copyright/license attached and list them here.
+License: BSD-3
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions
+ are met:
+ 1. Redistributions of source code must retain the above copyright
+    notice, this list of conditions and the following disclaimer.
+ 2. Redistributions in binary form must reproduce the above copyright
+    notice, this list of conditions and the following disclaimer in the
+    documentation and/or other materials provided with the distribution.
+ 3. The name of the author may not be used to endorse or promote products
+    derived from this software without specific prior written permission.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
