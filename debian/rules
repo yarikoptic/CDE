@@ -18,7 +18,7 @@ override_dh_auto_install:
 # contain treeish) but excluding some content
 get-orig-source:
 	git archive --worktree-attributes --format=tar \
-		--prefix=$(srcpkg)-$(uversion)/ $(uversion) \
+		--prefix=$(srcpkg)-$(uversion)/ v$(uversion) \
         | gzip -9 >| ../tarballs/$(srcpkg)_$(uversion).orig.tar.gz
 
 manpages: build
