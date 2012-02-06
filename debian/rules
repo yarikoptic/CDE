@@ -6,6 +6,8 @@ export DH_VERBOSE=1
 srcpkg = $(shell LC_ALL=C dpkg-parsechangelog | awk '/^Source:/{print $$2;}')
 uversion = $(shell LC_ALL=C dpkg-parsechangelog | awk '/^Version:/{print $$2;}' | sed -e 's,-[^-]*$$,,g')
 
+MANDIR=$(CURDIR)/debian/manpages
+
 %:
 	dh $@
 
@@ -18,3 +20,11 @@ get-orig-source:
 	git archive --worktree-attributes --format=tar \
 		--prefix=$(srcpkg)-$(uversion)/ $(uversion) \
         | gzip -9 >| ../tarballs/$(srcpkg)_$(uversion).orig.tar.gz
+
+manpages: build
+	@echo "I: Pre-generating manpages"
+	mkdir -p $(MANDIR)
+	for b in cde cde-exec; do \
+		help2man --no-info --no-discard-stderr --help-option=-h --version-string=$(uversion) ./$$b \
+		 >| $(MANDIR)/$$b.1; \
+	done
