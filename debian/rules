@@ -25,6 +25,8 @@ manpages: build
 	@echo "I: Pre-generating manpages"
 	mkdir -p $(MANDIR)
 	for b in cde cde-exec; do \
-		help2man --no-info --no-discard-stderr --help-option=-h --version-string=$(uversion) ./$$b \
-		 >| $(MANDIR)/$$b.1; \
+		help2man --no-info --no-discard-stderr --help-option=-h \
+			--opt-include=$(MANDIR)/$$b.inc \
+			--version-string=$(uversion) ./$$b \
+			>| $(MANDIR)/$$b.1; \
 	done
