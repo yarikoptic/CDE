@@ -54,6 +54,11 @@ override_dh_auto_configure:
 override_dh_auto_install:
 	make install DESTDIR=debian/cde PREFIX=/usr
 
+override_dh_auto_clean:
+	-dh_auto_clean $@
+	@echo "I: distcleaning in strace-4.6"
+	-cd strace-4.6 && make distclean
+
 # make orig tarball from repository corresponding to $srcpkg (should
 # contain treeish) but excluding some content
 get-orig-source:
