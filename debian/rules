@@ -8,8 +8,48 @@ uversion = $(shell LC_ALL=C dpkg-parsechangelog | awk '/^Version:/{print $$2;}' 
 
 MANDIR=$(CURDIR)/debian/manpages
 
+CFLAGS = -Wall -g
+
+ifneq (,$(findstring noopt,$(DEB_BUILD_OPTIONS)))
+  CFLAGS += -O0
+else
+  CFLAGS += -O2
+endif
+
+# Following logic was borrowed from strace Debian package
+# Copyright 1996-2011 strace Debian maintainers, License: BSD-3
+
+ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
+  NUMJOBS = $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
+  MAKEFLAGS += -j$(NUMJOBS)
+endif
+
+DEB_BUILD_GNU_TYPE := $(shell dpkg-architecture -qDEB_BUILD_GNU_TYPE)
+DEB_HOST_GNU_TYPE := $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
+DEB_HOST_ARCH := $(shell dpkg-architecture -qDEB_HOST_ARCH)
+
+arch64_map = i386=x86_64 powerpc=powerpc64 sparc=sparc64 s390=s390x
+ifneq (,$(filter $(DEB_HOST_ARCH)=%, $(arch64_map)))
+  HOST64 = $(strip $(patsubst $(DEB_HOST_ARCH)=%, %, \
+         $(filter $(DEB_HOST_ARCH)=%, $(arch64_map))))-linux-gnu
+  CC64 = gcc -m64
+  extra_build_targets += build64-stamp
+endif
+
+ifeq ($(DEB_HOST_GNU_TYPE),$(DEB_BUILD_GNU_TYPE))
+  CONFIG_OPTS = --build=$(DEB_BUILD_GNU_TYPE)
+else
+  CONFIG_OPTS = --build=$(DEB_BUILD_GNU_TYPE) --host=$(DEB_HOST_GNU_TYPE)
+endif
+
 %:
 	dh $@
+
+override_dh_auto_configure:
+	dh_auto_configure $@
+	: # Need to generate strace-4.6/Makefile with proper architecture specs
+	cd strace-4.6; \
+		CC="$(CC64)" sh ./configure --prefix=/usr --build=$(DEB_BUILD_GNU_TYPE) --host=$(HOST64)
 
 override_dh_auto_install:
 	make install DESTDIR=debian/cde PREFIX=/usr
