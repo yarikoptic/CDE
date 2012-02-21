@@ -25,6 +25,18 @@ License: BSD-3
 Files: readelf-mini
 Copyright: 1998-2009  Free Software Foundation, Inc.
 License: GPL-3.0+
+Comment:
+ Some files within readelf-mini were originally released under GPL 2.0
+ (or any later version) and still carry the original license header
+ whilst this project is now released under GPL v 3.0.
+ .
+ On Debian systems, the complete text of the GNU General Public
+ License version 2 can be found in "/usr/share/common-licenses/GPL-2".
+
+Files: readelf-mini/include/safe-ctype.h
+Copyright: 2000, 2001 Free Software Foundation, Inc
+License: LGPL-2.0+
+
 
 Files: debian/*
 Copyright: 2012 Yaroslav Halchenko <debian@onerussian.com>
@@ -33,6 +45,7 @@ License: GPL-3.0+
 Files: debian/rules
 Copyright: 1996-2011 strace Debian maintainers (parts)
 License: BSD-3
+
 
 License: GPL-3.0+
  This program is free software: you can redistribute it and/or modify
@@ -73,3 +86,20 @@ License: BSD-3
  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+License: LGPL-2+
+ This package is free software; you can redistribute it and/or
+ modify it under the terms of the GNU Lesser General Public
+ License as published by the Free Software Foundation; either
+ version 2 of the License, or (at your option) any later version.
+ .
+ This package is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ Lesser General Public License for more details.
+ .
+ You should have received a copy of the GNU General Public License
+ along with this program. If not, see <http://www.gnu.org/licenses/>.
+ .
+ On Debian systems, the complete text of the GNU Lesser General
+ Public License can be found in `/usr/share/common-licenses/LGPL-2'.
