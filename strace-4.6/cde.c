@@ -224,8 +224,8 @@ static void CDE_init_options(void);
 static void CDE_create_convenience_scripts(char** argv, int optind);
 static void CDE_create_toplevel_symlink_dirs(void);
 static void CDE_create_path_symlink_dirs(void);
+static void CDE_dump_environment_vars(void);
 static void CDE_load_environment_vars(void);
-
 
 
 // returns a component within real_pwd that represents the part within
@@ -3163,10 +3163,7 @@ void CDE_init(char** argv, int optind) {
     CDE_create_toplevel_symlink_dirs();
 
 
-    // copy /proc/self/environ to capture the FULL set of environment vars
-    char* fullenviron_fn = format("%s/cde.full-environment", CDE_PACKAGE_DIR);
-    copy_file((char*)"/proc/self/environ", fullenviron_fn, 0666);
-    free(fullenviron_fn);
+    CDE_dump_environment_vars();
   }
 
 
@@ -3543,6 +3540,73 @@ static void CDE_init_options() {
   cde_options_initialized = 1;
 }
 
+// Dump all environment variables to CDE_PACKAGE_DIR/cde.full_environment
+// except for those that cde.options says to ignore. 
+static void CDE_dump_environment_vars() {
+  // dump /proc/self/environ to a temporary file which we'll then mmap to
+  // process. (can't mmap procfs directly)
+  char* tmp_fn = format("/tmp/cde.full-environment.%d",(int)getpid());
+
+  copy_file((char*)"/proc/self/environ",tmp_fn,0600);
+
+  struct stat tmp_file_stat;
+  if (stat(tmp_fn, &tmp_file_stat)) {
+    perror(tmp_fn);
+    exit(1);
+  }
+  int tmp_fd = open(tmp_fn, O_RDONLY);
+  char* environ_start =
+    (char*)mmap(0, tmp_file_stat.st_size, PROT_READ, MAP_PRIVATE, tmp_fd, 0);
+
+  // open destination file
+  char* dest_fn = format("%s/cde.full-environment", CDE_PACKAGE_DIR);
+  int dest_fd = open(dest_fn, O_CREAT|O_TRUNC|O_WRONLY, 0664);
+
+  if (environ_start == MAP_FAILED || dest_fd < 0) {
+    fprintf(stderr, "Error dumping process environment to %s!\n", dest_fn);
+    exit(1);
+  }
+
+  // go through environment variables and write each to
+  // cde.full-environment UNLESS cde.options says to ignore it
+  char* environ_str = environ_start;
+  while (environ_str - environ_start < tmp_file_stat.st_size) {
+    int environ_strlen = strnlen(environ_str,tmp_file_stat.st_size - (environ_str - environ_start));
+    int i;
+    int include = 1;
+
+    for (i = 0; i < ignore_envvars_ind; i++) {
+      int ignored_strlen = strlen(ignore_envvars[i]);
+
+      if(environ_strlen >= ignored_strlen &&
+             strncmp(environ_str, ignore_envvars[i], ignored_strlen) == 0 &&
+             (environ_strlen == ignored_strlen || environ_str[ignored_strlen] == '='))
+      {
+        include = 0;
+        break;
+      }
+    }
+
+    if (environ_strlen > 0 && include) {
+      char null = 0;
+      if (write(dest_fd, environ_str, environ_strlen) < environ_strlen
+            || write(dest_fd, &null, 1) < 1) {
+        fprintf(stderr, "Error dumping process environment to %s!\n", dest_fn);
+        exit(1);
+      }
+    }
+
+    environ_str += (environ_strlen + 1);
+  }
+
+  close(dest_fd);
+  free(dest_fn);
+
+  munmap(environ_start, tmp_file_stat.st_size);
+  close(tmp_fd);
+  unlink(tmp_fn);
+  free(tmp_fn);
+}
 
 static void CDE_load_environment_vars() {
   static char cde_full_environment_abspath[MAXPATHLEN];
@@ -3594,6 +3658,8 @@ static void CDE_load_environment_vars() {
     }
 
     // make sure we're not ignoring this environment var:
+    // (this is here for backwards-compatibility- previous versions did not
+    // exclude them from cde.full_environment in the first place)
     int i;
     int ignore_me = 0;
     for (i = 0; i < ignore_envvars_ind; i++) {
