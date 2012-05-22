@@ -57,6 +57,15 @@ CDE is currently licensed under GPL v3:
 #if defined (I386)
 __asm__(".symver shmctl,shmctl@GLIBC_2.0"); // hack to eliminate glibc 2.2 dependency
 #endif
+#if defined (X86_64)
+__asm__(".symver memcpy,memcpy@GLIBC_2.2.5");
+#endif
+
+// http://stackoverflow.com/questions/8823267/linking-against-older-symbol-version-in-a-so-file
+void *__wrap_memcpy(void *dest, const void *src, size_t n)
+{
+    return memcpy(dest, src, n);
+}
 
 
 // 1 if we are executing code in a CDE package,
