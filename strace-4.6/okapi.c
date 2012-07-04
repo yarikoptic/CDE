@@ -60,9 +60,7 @@ char OKAPI_VERBOSE = 1; // print out warning messages?
 // See: http://www.trevorpounds.com/blog/?p=103
 __asm__(".symver realpath,realpath@GLIBC_2.0");
 #endif
-#if defined (X86_64)
-__asm__(".symver realpath,realpath@GLIBC_2.2.5");
-#endif
+
 
 #include <stdarg.h>
 extern char* format(const char *format, ...);

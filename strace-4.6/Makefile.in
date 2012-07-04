@@ -280,7 +280,7 @@ OS = @opsys@
 # ARCH is `i386', `m68k', `sparc', etc.
 ARCH = @arch@
 ACLOCAL_AMFLAGS = -I m4
-AM_CFLAGS = $(WARN_CFLAGS) -Wl,--hash-style=both -Wl,--wrap=memcpy # pgbovine - for backwards-compatibility with RedHat 4.X-like distros
+AM_CFLAGS = $(WARN_CFLAGS) -Wl,--hash-style=both # pgbovine - for backwards-compatibility with RedHat 4.X-like distros
 AM_CPPFLAGS = -I$(srcdir)/$(OS)/$(ARCH) -I$(srcdir)/$(OS) -I$(builddir)/$(OS)
 # pgbovine - added more files:
 strace_SOURCES = strace.c syscall.c count.c util.c desc.c file.c ipc.c \
