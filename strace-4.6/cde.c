@@ -1368,6 +1368,17 @@ void CDE_begin_execve(struct tcb* tcp) {
       }
     }
     free(tmp);
+    /* Patch from Yang Chen
+
+       "I am packaging our tool using it. I found there is a possible
+       bug in cde.c where opened files were not closed. In a long run,
+       it could cause fopen fail. I noticed it because our toolchain has
+       a lot of invocations on shell scripts and hence hit this
+       problem.""
+
+    */
+    fclose(f);
+
 
     if (!script_command) {
       fprintf(stderr, "Fatal error: '%s' seems to be a script without a #! line.\n(cde can only execute scripts that start with a proper #! line)\n",
