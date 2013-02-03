@@ -1,3 +1,9 @@
+cde (0.1-2) UNRELEASED; urgency=low
+
+  * Updated Homepage. Thanks Branen Salmon (Closes: #699643)
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Sat, 02 Feb 2013 22:03:54 -0500
+
 cde (0.1-1) unstable; urgency=low
 
   * Initial release (Closes: #610711)
