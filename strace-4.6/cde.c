@@ -978,7 +978,17 @@ sys_readlink(path, ...)
 
  */
 void CDE_begin_standard_fileop(struct tcb* tcp, const char* syscall_name) {
-  char* filename = strcpy_from_child(tcp, tcp->u_arg[0]);
+  //char* filename = strcpy_from_child(tcp, tcp->u_arg[0]);
+
+  /* Patch by Edward Wang
+     "Attached is a patch to fix a small bug that happens when a syscall
+     is called without any arguments (tcp->u_arg[0] is "0"). This
+     happened to me a few times when I was trying to package a portable
+     version of VLC media player."
+  */
+  char* filename = strcpy_from_child_or_null(tcp, tcp->u_arg[0]);
+  if (filename == NULL)
+    return;
 
   if (CDE_verbose_mode) {
     printf("[%d] BEGIN %s '%s'\n", tcp->pid, syscall_name, filename);
@@ -1368,6 +1378,17 @@ void CDE_begin_execve(struct tcb* tcp) {
       }
     }
     free(tmp);
+    /* Patch from Yang Chen
+
+       "I am packaging our tool using it. I found there is a possible
+       bug in cde.c where opened files were not closed. In a long run,
+       it could cause fopen fail. I noticed it because our toolchain has
+       a lot of invocations on shell scripts and hence hit this
+       problem.""
+
+    */
+    fclose(f);
+
 
     if (!script_command) {
       fprintf(stderr, "Fatal error: '%s' seems to be a script without a #! line.\n(cde can only execute scripts that start with a proper #! line)\n",

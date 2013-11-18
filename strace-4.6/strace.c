@@ -197,9 +197,9 @@ int exitval;
   if (CDE_exec_mode) {
     fprintf(ofp,
             "CDE: Code, Data, and Environment packaging for Linux\n"
-            "Copyright 2010-2011 Philip Guo (pg@cs.stanford.edu)\n"
-            "http://www.stanford.edu/~pgbovine/cde.html\n\n"
-            "usage: cde-exec [command within cde-root/ to run]\n");
+            "Copyright 2010-2012 Philip Guo (philip@pgbovine.net)\n\n"
+            "Full user manual: http://www.pgbovine.net/cde.html\n\n"
+            "Basic usage: cde-exec [command within cde-root/ to run]\n");
 
     fprintf(ofp, "\nOptions\n");
     fprintf(ofp, "  -l  : Use native dynamic linker on machine (less portable but more robust)\n");
@@ -209,13 +209,14 @@ int exitval;
     fprintf(ofp, "  -i '<file path>' : Ignore the given exact file path\n");
     fprintf(ofp, "  -p '<file path>' : Ignore the given file path prefix\n");
     fprintf(ofp, "  -v  : Verbose mode (for debugging)\n");
+    fprintf(ofp, "  -V  : Print version\n");
   }
   else {
     fprintf(ofp,
             "CDE: Code, Data, and Environment packaging for Linux\n"
-            "Copyright 2010-2011 Philip Guo (pg@cs.stanford.edu)\n"
-            "http://www.stanford.edu/~pgbovine/cde.html\n\n"
-            "usage: cde [command to run and package]\n");
+            "Copyright 2010-2012 Philip Guo (philip@pgbovine.net)\n\n"
+            "Full user manual: http://www.pgbovine.net/cde.html\n\n"
+            "Basic usage: cde [command to run and package]\n");
 
     fprintf(ofp, "\nOptions\n");
     fprintf(ofp, "  -c  : Print the order of files copied into the package in cde-copied-files.log\n");
@@ -224,6 +225,7 @@ int exitval;
     fprintf(ofp, "  -i '<file path>' : Ignore the given exact file path\n");
     fprintf(ofp, "  -p '<file path>' : Ignore the given file path prefix\n");
     fprintf(ofp, "  -v  : Verbose mode (for debugging)\n");
+    fprintf(ofp, "  -V  : Print version\n");
   }
 
 	exit(exitval);
@@ -973,7 +975,7 @@ main(int argc, char *argv[])
       CDE_verbose_mode = 1;
 			break;
 		case 'V':
-			printf("%s -- version %s\n", PACKAGE_NAME, VERSION);
+			printf("CDE v0.1\n");
 			exit(0);
 			break;
 		case 'z':
