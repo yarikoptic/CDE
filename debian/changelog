@@ -1,8 +1,10 @@
-cde (0.1-2) UNRELEASED; urgency=low
+cde (0.1+git9-g551e54d-1) unstable; urgency=low
 
+  * Fresh upstream snapshot
+    - resolves few issues (e.g. closing unused file descriptors)
   * Updated Homepage. Thanks Branen Salmon (Closes: #699643)
 
- -- Yaroslav Halchenko <debian@onerussian.com>  Sat, 02 Feb 2013 22:03:54 -0500
+ -- Yaroslav Halchenko <debian@onerussian.com>  Sun, 17 Nov 2013 20:47:11 -0500
 
 cde (0.1-1) unstable; urgency=low
 
