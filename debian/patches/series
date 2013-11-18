@@ -1,3 +1,2 @@
 up_ignore-noMakefile_on_clean
 deb_install_usr
-up_cp_cmdline_version

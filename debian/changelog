@@ -1,6 +1,6 @@
 cde (0.1+git9-g551e54d-1) unstable; urgency=low
 
-  * Fresh upstream snapshot
+  * Fresh upstream snapshot (includes up_cp_cmdline_version patch)
     - resolves few issues (e.g. closing unused file descriptors)
   * Updated Homepage. Thanks Branen Salmon (Closes: #699643)
 
